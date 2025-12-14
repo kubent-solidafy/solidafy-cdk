@@ -1,0 +1,46 @@
+# Build artifacts
+target/
+*.rs.bk
+
+# IDE
+.idea/
+.vscode/
+*.swp
+*.swo
+
+# Git
+.git/
+.gitignore
+
+# Documentation (not needed in image)
+*.md
+!README.md
+docs/
+
+# OS files
+.DS_Store
+Thumbs.db
+
+# Test and dev files
+*.log
+coverage/
+*.profraw
+*.profdata
+
+# Config files with secrets
+*-config.json
+.env
+.env.*
+*.pem
+*.key
+credentials.json
+
+# State files
+state/
+*.parquet
+state.json
+*-state.json
+
+# Temp files
+tmp/
+/tmp/

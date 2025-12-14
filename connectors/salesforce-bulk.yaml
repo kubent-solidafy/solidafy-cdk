@@ -1,0 +1,151 @@
+name: salesforce-bulk
+version: "1.0.0"
+base_url: "{{ config.instance_url }}/services/data/v59.0"
+
+auth:
+  type: oauth2_refresh_token
+  token_url: "https://login.salesforce.com/services/oauth2/token"
+  client_id: "{{ config.client_id }}"
+  client_secret: "{{ config.client_secret }}"
+  refresh_token: "{{ config.refresh_token }}"
+
+http:
+  timeout_secs: 120
+  max_retries: 3
+  rate_limit_rps: 10
+
+check:
+  path: /sobjects
+
+headers:
+  Content-Type: application/json
+
+streams:
+  # ============================================================================
+  # Bulk API 2.0 - Async Job Pattern
+  # ============================================================================
+
+  - name: accounts_bulk
+    partition:
+      type: async_job
+      create:
+        method: POST
+        path: /jobs/query
+        body: |
+          {
+            "operation": "query",
+            "query": "SELECT Id, Name, Type, Industry, Phone, Website, BillingCity, BillingState, BillingCountry, AnnualRevenue, NumberOfEmployees, OwnerId, CreatedDate, LastModifiedDate FROM Account"
+          }
+        job_id_path: id
+      poll:
+        path: /jobs/query/{{ job_id }}
+        interval_secs: 5
+        max_attempts: 120
+        status_path: state
+        completed_value: JobComplete
+        failed_values:
+          - Failed
+          - Aborted
+      download:
+        path: /jobs/query/{{ job_id }}/results
+        records_path: null  # CSV response, not JSON
+    request:
+      path: /jobs/query/{{ job_id }}/results
+    decoder:
+      type: csv
+    primary_key:
+      - Id
+    cursor_field: LastModifiedDate
+
+  - name: contacts_bulk
+    partition:
+      type: async_job
+      create:
+        method: POST
+        path: /jobs/query
+        body: |
+          {
+            "operation": "query",
+            "query": "SELECT Id, FirstName, LastName, Email, Phone, AccountId, Title, Department, MailingCity, MailingState, MailingCountry, OwnerId, CreatedDate, LastModifiedDate FROM Contact"
+          }
+        job_id_path: id
+      poll:
+        path: /jobs/query/{{ job_id }}
+        interval_secs: 5
+        max_attempts: 120
+        status_path: state
+        completed_value: JobComplete
+        failed_values:
+          - Failed
+          - Aborted
+      download:
+        path: /jobs/query/{{ job_id }}/results
+    request:
+      path: /jobs/query/{{ job_id }}/results
+    decoder:
+      type: csv
+    primary_key:
+      - Id
+    cursor_field: LastModifiedDate
+
+  - name: leads_bulk
+    partition:
+      type: async_job
+      create:
+        method: POST
+        path: /jobs/query
+        body: |
+          {
+            "operation": "query",
+            "query": "SELECT Id, FirstName, LastName, Email, Phone, Company, Title, Status, LeadSource, Industry, AnnualRevenue, OwnerId, CreatedDate, LastModifiedDate FROM Lead"
+          }
+        job_id_path: id
+      poll:
+        path: /jobs/query/{{ job_id }}
+        interval_secs: 5
+        max_attempts: 120
+        status_path: state
+        completed_value: JobComplete
+        failed_values:
+          - Failed
+          - Aborted
+      download:
+        path: /jobs/query/{{ job_id }}/results
+    request:
+      path: /jobs/query/{{ job_id }}/results
+    decoder:
+      type: csv
+    primary_key:
+      - Id
+    cursor_field: LastModifiedDate
+
+  - name: opportunities_bulk
+    partition:
+      type: async_job
+      create:
+        method: POST
+        path: /jobs/query
+        body: |
+          {
+            "operation": "query",
+            "query": "SELECT Id, Name, Amount, StageName, Probability, CloseDate, AccountId, OwnerId, Type, LeadSource, IsClosed, IsWon, CreatedDate, LastModifiedDate FROM Opportunity"
+          }
+        job_id_path: id
+      poll:
+        path: /jobs/query/{{ job_id }}
+        interval_secs: 5
+        max_attempts: 120
+        status_path: state
+        completed_value: JobComplete
+        failed_values:
+          - Failed
+          - Aborted
+      download:
+        path: /jobs/query/{{ job_id }}/results
+    request:
+      path: /jobs/query/{{ job_id }}/results
+    decoder:
+      type: csv
+    primary_key:
+      - Id
+    cursor_field: LastModifiedDate

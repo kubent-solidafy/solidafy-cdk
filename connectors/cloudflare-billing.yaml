@@ -1,0 +1,67 @@
+name: cloudflare-billing
+version: "1.0.0"
+base_url: "https://api.cloudflare.com/client/v4"
+
+auth:
+  type: bearer
+  token: "{{ config.api_token }}"
+
+http:
+  timeout_secs: 60
+  max_retries: 3
+  rate_limit_rps: 4  # Cloudflare API rate limit is 1200 req/5min = 4/sec
+
+check:
+  path: /accounts/{{ config.account_id }}
+
+headers:
+  Content-Type: application/json
+
+streams:
+  # ============================================================================
+  # Account Info
+  # ============================================================================
+
+  - name: account
+    request:
+      path: /accounts/{{ config.account_id }}
+    decoder:
+      type: json
+      records_path: result
+    primary_key:
+      - id
+
+  # ============================================================================
+  # Billing Profile
+  # ============================================================================
+
+  - name: billing_profile
+    request:
+      path: /accounts/{{ config.account_id }}/billing/profile
+    decoder:
+      type: json
+      records_path: result
+    primary_key:
+      - id
+
+  # ============================================================================
+  # Account Subscriptions
+  # ============================================================================
+
+  - name: subscriptions
+    request:
+      path: /accounts/{{ config.account_id }}/subscriptions
+      params:
+        per_page: "50"
+    decoder:
+      type: json
+      records_path: result
+    pagination:
+      type: page_number
+      page_param: page
+      start_page: 1
+      page_size_param: per_page
+      page_size: 50
+    primary_key:
+      - id
+    cursor_field: created_date

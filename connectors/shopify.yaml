@@ -1,0 +1,104 @@
+name: shopify
+version: "1.0.0"
+base_url: "https://{{ config.shop_domain }}/admin/api/2024-01"
+
+auth:
+  type: api_key
+  key: X-Shopify-Access-Token
+  value: "{{ config.access_token }}"
+  location: header
+
+http:
+  timeout_secs: 30
+  max_retries: 3
+  rate_limit_rps: 2
+
+headers:
+  Content-Type: application/json
+
+streams:
+  - name: products
+    request:
+      path: /products.json
+    decoder:
+      type: json
+      records_path: products
+    pagination:
+      type: link_header
+      rel: next
+    primary_key:
+      - id
+    cursor_field: updated_at
+
+  - name: orders
+    request:
+      path: /orders.json
+      params:
+        status: any
+        created_at_min: "{{ config.start_date }}"
+    decoder:
+      type: json
+      records_path: orders
+    pagination:
+      type: link_header
+      rel: next
+    primary_key:
+      - id
+    cursor_field: updated_at
+
+  - name: customers
+    request:
+      path: /customers.json
+    decoder:
+      type: json
+      records_path: customers
+    pagination:
+      type: link_header
+      rel: next
+    primary_key:
+      - id
+    cursor_field: updated_at
+
+  - name: inventory_items
+    request:
+      path: /inventory_items.json
+      params:
+        ids: "{{ partition.ids }}"
+    decoder:
+      type: json
+      records_path: inventory_items
+    primary_key:
+      - id
+
+  - name: locations
+    request:
+      path: /locations.json
+    decoder:
+      type: json
+      records_path: locations
+    primary_key:
+      - id
+
+  - name: collections
+    request:
+      path: /custom_collections.json
+    decoder:
+      type: json
+      records_path: custom_collections
+    pagination:
+      type: link_header
+      rel: next
+    primary_key:
+      - id
+
+  - name: discounts
+    request:
+      path: /price_rules.json
+    decoder:
+      type: json
+      records_path: price_rules
+    pagination:
+      type: link_header
+      rel: next
+    primary_key:
+      - id

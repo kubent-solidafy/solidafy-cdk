@@ -1,0 +1,376 @@
+name: stripe
+version: "1.0.0"
+base_url: "https://api.stripe.com/v1"
+
+auth:
+  type: bearer
+  token: "{{ config.api_key }}"
+
+http:
+  timeout_secs: 30
+  max_retries: 3
+  rate_limit_rps: 25  # Stripe allows 100/sec in live, 25/sec in test mode
+
+check:
+  path: /customers
+  params:
+    limit: "1"
+
+headers:
+  Content-Type: application/x-www-form-urlencoded
+  Stripe-Version: "2024-12-18.acacia"
+
+streams:
+  # ============================================================================
+  # Core Objects
+  # ============================================================================
+
+  - name: customers
+    request:
+      path: /customers
+      params:
+        limit: "100"
+        created[gte]: "{{ config.start_date_ts }}"
+    decoder:
+      type: json
+      records_path: data
+    pagination:
+      type: cursor
+      cursor_param: starting_after
+      cursor_path: data[-1].id
+    primary_key:
+      - id
+    cursor_field: created
+
+  - name: products
+    request:
+      path: /products
+      params:
+        limit: "100"
+        active: "true"
+    decoder:
+      type: json
+      records_path: data
+    pagination:
+      type: cursor
+      cursor_param: starting_after
+      cursor_path: data[-1].id
+    primary_key:
+      - id
+    cursor_field: created
+
+  - name: prices
+    request:
+      path: /prices
+      params:
+        limit: "100"
+        active: "true"
+    decoder:
+      type: json
+      records_path: data
+    pagination:
+      type: cursor
+      cursor_param: starting_after
+      cursor_path: data[-1].id
+    primary_key:
+      - id
+    cursor_field: created
+
+  # ============================================================================
+  # Payments
+  # ============================================================================
+
+  - name: charges
+    request:
+      path: /charges
+      params:
+        limit: "100"
+        created[gte]: "{{ config.start_date_ts }}"
+    decoder:
+      type: json
+      records_path: data
+    pagination:
+      type: cursor
+      cursor_param: starting_after
+      cursor_path: data[-1].id
+    primary_key:
+      - id
+    cursor_field: created
+
+  - name: payment_intents
+    request:
+      path: /payment_intents
+      params:
+        limit: "100"
+        created[gte]: "{{ config.start_date_ts }}"
+    decoder:
+      type: json
+      records_path: data
+    pagination:
+      type: cursor
+      cursor_param: starting_after
+      cursor_path: data[-1].id
+    primary_key:
+      - id
+    cursor_field: created
+
+  - name: refunds
+    request:
+      path: /refunds
+      params:
+        limit: "100"
+        created[gte]: "{{ config.start_date_ts }}"
+    decoder:
+      type: json
+      records_path: data
+    pagination:
+      type: cursor
+      cursor_param: starting_after
+      cursor_path: data[-1].id
+    primary_key:
+      - id
+    cursor_field: created
+
+  - name: disputes
+    request:
+      path: /disputes
+      params:
+        limit: "100"
+        created[gte]: "{{ config.start_date_ts }}"
+    decoder:
+      type: json
+      records_path: data
+    pagination:
+      type: cursor
+      cursor_param: starting_after
+      cursor_path: data[-1].id
+    primary_key:
+      - id
+    cursor_field: created
+
+  # ============================================================================
+  # Billing / Subscriptions
+  # ============================================================================
+
+  - name: subscriptions
+    request:
+      path: /subscriptions
+      params:
+        limit: "100"
+        status: all
+        created[gte]: "{{ config.start_date_ts }}"
+    decoder:
+      type: json
+      records_path: data
+    pagination:
+      type: cursor
+      cursor_param: starting_after
+      cursor_path: data[-1].id
+    primary_key:
+      - id
+    cursor_field: created
+
+  - name: invoices
+    request:
+      path: /invoices
+      params:
+        limit: "100"
+        created[gte]: "{{ config.start_date_ts }}"
+    decoder:
+      type: json
+      records_path: data
+    pagination:
+      type: cursor
+      cursor_param: starting_after
+      cursor_path: data[-1].id
+    primary_key:
+      - id
+    cursor_field: created
+
+  - name: invoice_items
+    request:
+      path: /invoiceitems
+      params:
+        limit: "100"
+        created[gte]: "{{ config.start_date_ts }}"
+    decoder:
+      type: json
+      records_path: data
+    pagination:
+      type: cursor
+      cursor_param: starting_after
+      cursor_path: data[-1].id
+    primary_key:
+      - id
+    cursor_field: date
+
+  - name: plans
+    request:
+      path: /plans
+      params:
+        limit: "100"
+        active: "true"
+    decoder:
+      type: json
+      records_path: data
+    pagination:
+      type: cursor
+      cursor_param: starting_after
+      cursor_path: data[-1].id
+    primary_key:
+      - id
+    cursor_field: created
+
+  - name: coupons
+    request:
+      path: /coupons
+      params:
+        limit: "100"
+    decoder:
+      type: json
+      records_path: data
+    pagination:
+      type: cursor
+      cursor_param: starting_after
+      cursor_path: data[-1].id
+    primary_key:
+      - id
+    cursor_field: created
+
+  # ============================================================================
+  # Connect / Payouts
+  # ============================================================================
+
+  - name: balance_transactions
+    request:
+      path: /balance_transactions
+      params:
+        limit: "100"
+        created[gte]: "{{ config.start_date_ts }}"
+    decoder:
+      type: json
+      records_path: data
+    pagination:
+      type: cursor
+      cursor_param: starting_after
+      cursor_path: data[-1].id
+    primary_key:
+      - id
+    cursor_field: created
+
+  - name: payouts
+    request:
+      path: /payouts
+      params:
+        limit: "100"
+        created[gte]: "{{ config.start_date_ts }}"
+    decoder:
+      type: json
+      records_path: data
+    pagination:
+      type: cursor
+      cursor_param: starting_after
+      cursor_path: data[-1].id
+    primary_key:
+      - id
+    cursor_field: created
+
+  - name: transfers
+    request:
+      path: /transfers
+      params:
+        limit: "100"
+        created[gte]: "{{ config.start_date_ts }}"
+    decoder:
+      type: json
+      records_path: data
+    pagination:
+      type: cursor
+      cursor_param: starting_after
+      cursor_path: data[-1].id
+    primary_key:
+      - id
+    cursor_field: created
+
+  # ============================================================================
+  # Events (for CDC / change tracking)
+  # ============================================================================
+
+  - name: events
+    request:
+      path: /events
+      params:
+        limit: "100"
+        created[gte]: "{{ config.start_date_ts }}"
+    decoder:
+      type: json
+      records_path: data
+    pagination:
+      type: cursor
+      cursor_param: starting_after
+      cursor_path: data[-1].id
+    primary_key:
+      - id
+    cursor_field: created
+
+  # ============================================================================
+  # Checkout
+  # ============================================================================
+
+  - name: checkout_sessions
+    request:
+      path: /checkout/sessions
+      params:
+        limit: "100"
+    decoder:
+      type: json
+      records_path: data
+    pagination:
+      type: cursor
+      cursor_param: starting_after
+      cursor_path: data[-1].id
+    primary_key:
+      - id
+    cursor_field: created
+
+  # ============================================================================
+  # Payment Methods
+  # ============================================================================
+
+  - name: payment_methods
+    request:
+      path: /payment_methods
+      params:
+        limit: "100"
+        type: card
+    decoder:
+      type: json
+      records_path: data
+    pagination:
+      type: cursor
+      cursor_param: starting_after
+      cursor_path: data[-1].id
+    primary_key:
+      - id
+    cursor_field: created
+
+  # ============================================================================
+  # Setup Intents
+  # ============================================================================
+
+  - name: setup_intents
+    request:
+      path: /setup_intents
+      params:
+        limit: "100"
+        created[gte]: "{{ config.start_date_ts }}"
+    decoder:
+      type: json
+      records_path: data
+    pagination:
+      type: cursor
+      cursor_param: starting_after
+      cursor_path: data[-1].id
+    primary_key:
+      - id
+    cursor_field: created

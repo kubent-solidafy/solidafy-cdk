@@ -1,0 +1,247 @@
+name: salesforce
+version: "1.0.0"
+base_url: "{{ config.instance_url }}/services/data/v59.0"
+
+auth:
+  type: oauth2_refresh_token
+  token_url: "https://login.salesforce.com/services/oauth2/token"
+  client_id: "{{ config.client_id }}"
+  client_secret: "{{ config.client_secret }}"
+  refresh_token: "{{ config.refresh_token }}"
+
+http:
+  timeout_secs: 60
+  max_retries: 3
+  rate_limit_rps: 25  # Salesforce varies by edition
+
+check:
+  path: /sobjects
+
+headers:
+  Content-Type: application/json
+
+streams:
+  # ============================================================================
+  # Core Objects
+  # ============================================================================
+
+  - name: accounts
+    request:
+      path: /query
+      params:
+        q: "SELECT Id, Name, Type, Industry, Phone, Website, BillingCity, BillingState, BillingCountry, AnnualRevenue, NumberOfEmployees, OwnerId, CreatedDate, LastModifiedDate FROM Account"
+    decoder:
+      type: json
+      records_path: records
+    pagination:
+      type: next_url
+      next_url_path: nextRecordsUrl
+    primary_key:
+      - Id
+    cursor_field: LastModifiedDate
+
+  - name: contacts
+    request:
+      path: /query
+      params:
+        q: "SELECT Id, FirstName, LastName, Email, Phone, AccountId, Title, Department, MailingCity, MailingState, MailingCountry, OwnerId, CreatedDate, LastModifiedDate FROM Contact"
+    decoder:
+      type: json
+      records_path: records
+    pagination:
+      type: next_url
+      next_url_path: nextRecordsUrl
+    primary_key:
+      - Id
+    cursor_field: LastModifiedDate
+
+  - name: leads
+    request:
+      path: /query
+      params:
+        q: "SELECT Id, FirstName, LastName, Email, Phone, Company, Title, Status, LeadSource, Industry, AnnualRevenue, OwnerId, CreatedDate, LastModifiedDate FROM Lead"
+    decoder:
+      type: json
+      records_path: records
+    pagination:
+      type: next_url
+      next_url_path: nextRecordsUrl
+    primary_key:
+      - Id
+    cursor_field: LastModifiedDate
+
+  - name: opportunities
+    request:
+      path: /query
+      params:
+        q: "SELECT Id, Name, Amount, StageName, Probability, CloseDate, AccountId, OwnerId, Type, LeadSource, IsClosed, IsWon, CreatedDate, LastModifiedDate FROM Opportunity"
+    decoder:
+      type: json
+      records_path: records
+    pagination:
+      type: next_url
+      next_url_path: nextRecordsUrl
+    primary_key:
+      - Id
+    cursor_field: LastModifiedDate
+
+  - name: cases
+    request:
+      path: /query
+      params:
+        q: "SELECT Id, CaseNumber, Subject, Description, Status, Priority, Origin, Type, AccountId, ContactId, OwnerId, IsClosed, CreatedDate, LastModifiedDate FROM Case"
+    decoder:
+      type: json
+      records_path: records
+    pagination:
+      type: next_url
+      next_url_path: nextRecordsUrl
+    primary_key:
+      - Id
+    cursor_field: LastModifiedDate
+
+  - name: tasks
+    request:
+      path: /query
+      params:
+        q: "SELECT Id, Subject, Status, Priority, WhoId, WhatId, OwnerId, ActivityDate, IsClosed, CreatedDate, LastModifiedDate FROM Task"
+    decoder:
+      type: json
+      records_path: records
+    pagination:
+      type: next_url
+      next_url_path: nextRecordsUrl
+    primary_key:
+      - Id
+    cursor_field: LastModifiedDate
+
+  - name: events
+    request:
+      path: /query
+      params:
+        q: "SELECT Id, Subject, Location, StartDateTime, EndDateTime, WhoId, WhatId, OwnerId, IsAllDayEvent, CreatedDate, LastModifiedDate FROM Event"
+    decoder:
+      type: json
+      records_path: records
+    pagination:
+      type: next_url
+      next_url_path: nextRecordsUrl
+    primary_key:
+      - Id
+    cursor_field: LastModifiedDate
+
+  # ============================================================================
+  # Users & Teams
+  # ============================================================================
+
+  - name: users
+    request:
+      path: /query
+      params:
+        q: "SELECT Id, Username, Email, FirstName, LastName, Title, Department, IsActive, ProfileId, UserRoleId, CreatedDate, LastModifiedDate FROM User"
+    decoder:
+      type: json
+      records_path: records
+    pagination:
+      type: next_url
+      next_url_path: nextRecordsUrl
+    primary_key:
+      - Id
+    cursor_field: LastModifiedDate
+
+  - name: profiles
+    request:
+      path: /query
+      params:
+        q: "SELECT Id, Name, Description, UserType, CreatedDate, LastModifiedDate FROM Profile"
+    decoder:
+      type: json
+      records_path: records
+    pagination:
+      type: next_url
+      next_url_path: nextRecordsUrl
+    primary_key:
+      - Id
+
+  # ============================================================================
+  # Products & Pricing
+  # ============================================================================
+
+  - name: products
+    request:
+      path: /query
+      params:
+        q: "SELECT Id, Name, ProductCode, Description, IsActive, Family, CreatedDate, LastModifiedDate FROM Product2"
+    decoder:
+      type: json
+      records_path: records
+    pagination:
+      type: next_url
+      next_url_path: nextRecordsUrl
+    primary_key:
+      - Id
+    cursor_field: LastModifiedDate
+
+  - name: pricebooks
+    request:
+      path: /query
+      params:
+        q: "SELECT Id, Name, Description, IsActive, IsStandard, CreatedDate, LastModifiedDate FROM Pricebook2"
+    decoder:
+      type: json
+      records_path: records
+    pagination:
+      type: next_url
+      next_url_path: nextRecordsUrl
+    primary_key:
+      - Id
+    cursor_field: LastModifiedDate
+
+  - name: pricebook_entries
+    request:
+      path: /query
+      params:
+        q: "SELECT Id, Name, Pricebook2Id, Product2Id, UnitPrice, IsActive, UseStandardPrice, CreatedDate, LastModifiedDate FROM PricebookEntry"
+    decoder:
+      type: json
+      records_path: records
+    pagination:
+      type: next_url
+      next_url_path: nextRecordsUrl
+    primary_key:
+      - Id
+    cursor_field: LastModifiedDate
+
+  # ============================================================================
+  # Campaigns
+  # ============================================================================
+
+  - name: campaigns
+    request:
+      path: /query
+      params:
+        q: "SELECT Id, Name, Type, Status, StartDate, EndDate, BudgetedCost, ActualCost, ExpectedRevenue, NumberOfLeads, NumberOfConvertedLeads, NumberOfContacts, NumberOfResponses, OwnerId, CreatedDate, LastModifiedDate FROM Campaign"
+    decoder:
+      type: json
+      records_path: records
+    pagination:
+      type: next_url
+      next_url_path: nextRecordsUrl
+    primary_key:
+      - Id
+    cursor_field: LastModifiedDate
+
+  - name: campaign_members
+    request:
+      path: /query
+      params:
+        q: "SELECT Id, CampaignId, LeadId, ContactId, Status, HasResponded, FirstRespondedDate, CreatedDate, LastModifiedDate FROM CampaignMember"
+    decoder:
+      type: json
+      records_path: records
+    pagination:
+      type: next_url
+      next_url_path: nextRecordsUrl
+    primary_key:
+      - Id
+    cursor_field: LastModifiedDate

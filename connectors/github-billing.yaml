@@ -1,0 +1,191 @@
+# GitHub Billing Connector
+# Syncs billing and usage data from GitHub's billing API
+# Requires a GitHub PAT with admin:org or admin:enterprise scope
+
+name: github-billing
+version: "1.0.0"
+base_url: "https://api.github.com"
+
+auth:
+  type: bearer
+  token: "{{ config.access_token }}"
+
+headers:
+  Accept: "application/vnd.github+json"
+  X-GitHub-Api-Version: "2022-11-28"
+
+http:
+  timeout_secs: 30
+  max_retries: 3
+  rate_limit_rps: 5
+
+check:
+  path: "/user"
+
+streams:
+  # ============================================================================
+  # Organization Billing - Actions
+  # ============================================================================
+  - name: actions_billing
+    request:
+      path: "/orgs/{{ config.org }}/settings/billing/actions"
+      method: GET
+    decoder:
+      type: json
+    primary_key:
+      - org
+    cursor_field: null
+    transform:
+      - set:
+          field: org
+          value: "{{ config.org }}"
+      - set:
+          field: synced_at
+          value: "{{ now }}"
+
+  # ============================================================================
+  # Organization Billing - Packages (Container Registry, npm, etc.)
+  # ============================================================================
+  - name: packages_billing
+    request:
+      path: "/orgs/{{ config.org }}/settings/billing/packages"
+      method: GET
+    decoder:
+      type: json
+    primary_key:
+      - org
+    cursor_field: null
+    transform:
+      - set:
+          field: org
+          value: "{{ config.org }}"
+      - set:
+          field: synced_at
+          value: "{{ now }}"
+
+  # ============================================================================
+  # Organization Billing - Shared Storage (LFS, Actions artifacts, Packages)
+  # ============================================================================
+  - name: shared_storage_billing
+    request:
+      path: "/orgs/{{ config.org }}/settings/billing/shared-storage"
+      method: GET
+    decoder:
+      type: json
+    primary_key:
+      - org
+    cursor_field: null
+    transform:
+      - set:
+          field: org
+          value: "{{ config.org }}"
+      - set:
+          field: synced_at
+          value: "{{ now }}"
+
+  # ============================================================================
+  # Organization Billing - Copilot
+  # ============================================================================
+  - name: copilot_billing
+    request:
+      path: "/orgs/{{ config.org }}/copilot/billing"
+      method: GET
+    decoder:
+      type: json
+    primary_key:
+      - org
+    cursor_field: null
+    transform:
+      - set:
+          field: org
+          value: "{{ config.org }}"
+      - set:
+          field: synced_at
+          value: "{{ now }}"
+
+  # ============================================================================
+  # Organization Copilot Seats (who has Copilot assigned)
+  # ============================================================================
+  - name: copilot_seats
+    request:
+      path: "/orgs/{{ config.org }}/copilot/billing/seats"
+      method: GET
+      params:
+        per_page: "100"
+    decoder:
+      type: json
+      records_path: seats
+    pagination:
+      type: page_number
+      page_param: page
+      page_size_param: per_page
+      page_size: 100
+    primary_key:
+      - assignee.login
+    cursor_field: null
+    transform:
+      - set:
+          field: org
+          value: "{{ config.org }}"
+
+  # ============================================================================
+  # Actions Usage by Repository (detailed breakdown)
+  # ============================================================================
+  - name: actions_usage
+    request:
+      path: "/orgs/{{ config.org }}/settings/billing/actions"
+      method: GET
+    decoder:
+      type: json
+    primary_key:
+      - org
+    cursor_field: null
+    transform:
+      - set:
+          field: org
+          value: "{{ config.org }}"
+
+  # ============================================================================
+  # Organization Members (for seat tracking)
+  # ============================================================================
+  - name: org_members
+    request:
+      path: "/orgs/{{ config.org }}/members"
+      method: GET
+      params:
+        per_page: "100"
+    decoder:
+      type: json
+    pagination:
+      type: page_number
+      page_param: page
+      page_size_param: per_page
+      page_size: 100
+    primary_key:
+      - id
+    cursor_field: null
+
+  # ============================================================================
+  # Organization Repositories (for storage tracking)
+  # ============================================================================
+  - name: org_repos
+    request:
+      path: "/orgs/{{ config.org }}/repos"
+      method: GET
+      params:
+        per_page: "100"
+        type: "all"
+    decoder:
+      type: json
+    pagination:
+      type: page_number
+      page_param: page
+      page_size_param: per_page
+      page_size: 100
+    primary_key:
+      - id
+    cursor_field: updated_at
+    transform:
+      - set:
+          field: org
+          value: "{{ config.org }}"

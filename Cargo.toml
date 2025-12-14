@@ -1,0 +1,106 @@
+[package]
+name = "solidafy-cdk"
+version = "0.1.0"
+edition = "2021"
+description = "A minimal, Rust-native framework for building data source connectors"
+license = "MIT"
+repository = "https://github.com/kubent-solidafy/solidafy-cdk"
+keywords = ["connector", "etl", "data", "arrow", "parquet"]
+categories = ["data-structures", "api-bindings"]
+
+[lib]
+name = "solidafy_cdk"
+path = "src/lib.rs"
+
+[[bin]]
+name = "solidafy-cdk"
+path = "src/main.rs"
+
+[dependencies]
+# Async runtime
+tokio = { version = "1", features = ["full"] }
+async-trait = "0.1"
+futures = "0.3"
+
+# HTTP client
+reqwest = { version = "0.12", default-features = false, features = ["json", "rustls-tls"] }
+url = "2"
+
+# HTTP server
+axum = "0.7"
+tower = "0.4"
+tower-http = { version = "0.5", features = ["cors", "trace"] }
+
+# Serialization
+serde = { version = "1", features = ["derive"] }
+serde_json = "1"
+serde_yaml = "0.9"
+
+# Data formats
+arrow = { version = "53", features = ["json"] }
+parquet = { version = "53", features = ["arrow"] }
+
+# Cloud storage (S3, R2, GCS, Azure)
+object_store = { version = "0.11", features = ["aws", "gcp", "azure"] }
+
+# JSON processing
+jsonpath-rust = "0.7"
+
+# Rate limiting
+governor = "0.6"
+
+# Auth
+jsonwebtoken = "9"
+base64 = "0.22"
+
+# Date/time
+chrono = { version = "0.4", features = ["serde"] }
+
+# Error handling
+thiserror = "1"
+anyhow = "1"
+
+# CLI
+clap = { version = "4", features = ["derive"] }
+
+# Logging
+tracing = "0.1"
+tracing-subscriber = { version = "0.3", features = ["env-filter"] }
+
+# Utils
+regex = "1"
+once_cell = "1"
+pin-project-lite = "0.2"
+bytes = "1"
+
+# Database support (DuckDB)
+duckdb = { version = "1.1", features = ["bundled"] }
+
+[dev-dependencies]
+tokio-test = "0.4"
+wiremock = "0.6"
+tempfile = "3"
+pretty_assertions = "1"
+test-case = "3"
+
+[profile.release]
+lto = true
+codegen-units = 1
+strip = true
+opt-level = "z"  # Optimize for size
+
+[lints.clippy]
+cast_possible_truncation = "allow"
+cast_sign_loss = "allow"
+cast_lossless = "allow"
+too_many_lines = "allow"
+ref_option = "allow"
+unused_self = "allow"
+struct_excessive_bools = "allow"
+must_use_candidate = "allow"
+items_after_statements = "allow"
+unnecessary_wraps = "allow"
+match_same_arms = "allow"
+match_wildcard_for_single_variants = "allow"
+needless_pass_by_value = "allow"
+unused_async = "allow"

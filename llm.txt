@@ -1,0 +1,1661 @@
+# Solidafy CDK - LLM Reference Guide
+
+> This file is optimized for LLM consumption. It provides structured information
+> about connectors, configurations, and output protocols for programmatic use.
+
+## Overview
+
+Solidafy CDK is a CLI tool for syncing data from REST APIs. **Built-in connectors
+are embedded in the binary** - just use `--connector stripe` (no YAML file needed).
+Custom connectors can still be loaded from YAML files. The tool outputs structured
+JSON messages to stdout (newline-delimited JSON).
+
+## Built-in Connectors
+
+The following connectors are embedded in the binary:
+
+| Name | Aliases | Category | Description |
+|------|---------|----------|-------------|
+| `stripe` | - | Payments | Stripe payments, customers, invoices, subscriptions |
+| `openai` | `openai-billing` | AI/ML | OpenAI API usage, costs, and billing data |
+| `anthropic` | `anthropic-billing` | AI/ML | Anthropic API usage and billing data |
+| `cloudflare` | `cloudflare-billing` | Infrastructure | Cloudflare billing and usage data |
+| `salesforce` | - | CRM | Salesforce CRM objects via REST API |
+| `salesforce-bulk` | - | CRM | Salesforce CRM objects via Bulk API 2.0 |
+| `hubspot` | - | CRM | HubSpot CRM contacts, companies, deals |
+| `shopify` | - | E-commerce | Shopify orders, products, customers |
+| `zendesk` | - | Support | Zendesk tickets, users, organizations |
+| `github` | `github-billing` | Developer Tools | GitHub Actions, Copilot, Packages billing and usage |
+| `postgres` | `postgresql` | Database | PostgreSQL tables via DuckDB |
+| `mysql` | `mariadb` | Database | MySQL/MariaDB tables via DuckDB |
+| `sqlite` | - | Database | SQLite database tables via DuckDB |
+
+**Usage:**
+```bash
+# Use built-in connector by name
+solidafy-cdk streams --connector stripe
+solidafy-cdk check --connector openai --config-json '{"admin_api_key":"..."}'
+solidafy-cdk read --connector stripe --config-json '{"api_key":"sk_live_..."}' --streams customers
+
+# Or load custom YAML file
+solidafy-cdk read --connector ./my-custom-connector.yaml --config-json '...'
+```
+
+## What You Get After a Successful Sync
+
+After running `solidafy-cdk read`, you receive:
+
+1. **RECORD messages** - The actual data records from each stream
+2. **STATE message** - Cursor positions for incremental sync (save this!)
+3. **SYNC_SUMMARY message** - Overall result with per-stream statistics
+
+### Example Complete Output (JSON format)
+
+```
+{"type":"LOG","log":{"level":"INFO","message":"Starting sync for stream: customers"}}
+{"type":"LOG","log":{"level":"DEBUG","message":"Page 1: fetched 100 records"}}
+{"type":"RECORD","record":{"stream":"customers","data":{"id":"cus_1","email":"a@example.com"},"emitted_at":1702500000000}}
+{"type":"RECORD","record":{"stream":"customers","data":{"id":"cus_2","email":"b@example.com"},"emitted_at":1702500000000}}
+{"type":"LOG","log":{"level":"INFO","message":"Completed sync for customers: 2 records in 1 pages"}}
+{"type":"STATE","state":{"streams":{"customers":{"cursor":"2024-12-01T00:00:00Z"}}}}
+{"type":"SYNC_SUMMARY","summary":{"status":"SUCCEEDED","connector":"stripe","total_records":2,"total_streams":1,"successful_streams":1,"failed_streams":0,"duration_ms":1500,"output":{"format":"json","directory":null,"state_file":null},"streams":[{"stream":"customers","status":"SUCCESS","records_synced":2,"duration_ms":1500}]}}
+```
+
+### Example Complete Output (Parquet format with state file)
+
+```bash
+solidafy-cdk read --connector stripe --config-json '{"api_key":"sk_live_..."}' \
+  --streams customers,invoices \
+  --format parquet \
+  --output /data/stripe \
+  --state /data/stripe/state.json
+```
+
+Last message (SYNC_SUMMARY):
+```json
+{
+  "type": "SYNC_SUMMARY",
+  "summary": {
+    "status": "SUCCEEDED",
+    "connector": "stripe",
+    "total_records": 1500,
+    "total_streams": 2,
+    "successful_streams": 2,
+    "failed_streams": 0,
+    "duration_ms": 12500,
+    "output": {
+      "format": "parquet",
+      "directory": "/data/stripe",
+      "state_file": "/data/stripe/state.json"
+    },
+    "streams": [
+      {
+        "stream": "customers",
+        "status": "SUCCESS",
+        "records_synced": 500,
+        "duration_ms": 3200,
+        "output_file": "/data/stripe/customers/dt=2025-12-14/data.parquet"
+      },
+      {
+        "stream": "invoices",
+        "status": "SUCCESS",
+        "records_synced": 1000,
+        "duration_ms": 9300,
+        "output_file": "/data/stripe/invoices/dt=2025-12-14/data.parquet"
+      }
+    ]
+  }
+}
+```
+
+### Example Complete Output (Cloud Storage - S3)
+
+```bash
+solidafy-cdk read --connector stripe --config-json '{"api_key":"sk_live_..."}' \
+  --streams customers,invoices \
+  --format parquet \
+  --output s3://my-datalake/stripe/
+```
+
+Last message (SYNC_SUMMARY):
+```json
+{
+  "type": "SYNC_SUMMARY",
+  "summary": {
+    "status": "SUCCEEDED",
+    "connector": "stripe",
+    "total_records": 1500,
+    "total_streams": 2,
+    "successful_streams": 2,
+    "failed_streams": 0,
+    "duration_ms": 12500,
+    "output": {
+      "format": "parquet",
+      "directory": "s3://my-datalake/stripe/",
+      "state_file": null
+    },
+    "streams": [
+      {
+        "stream": "customers",
+        "status": "SUCCESS",
+        "records_synced": 500,
+        "duration_ms": 3200,
+        "output_file": "s3://customers/dt=2025-12-14/data.parquet"
+      },
+      {
+        "stream": "invoices",
+        "status": "SUCCESS",
+        "records_synced": 1000,
+        "duration_ms": 9300,
+        "output_file": "s3://invoices/dt=2025-12-14/data.parquet"
+      }
+    ]
+  }
+}
+```
+
+### Key Messages to Parse
+
+| Message | Purpose | How to Use |
+|---------|---------|------------|
+| `RECORD` | Data records | Store in your database |
+| `STATE` (final) | Cursor positions | Save and pass to `--state-json` next time |
+| `SYNC_SUMMARY` | Overall result with file paths | Check `status`, get `output_file` paths |
+
+### SYNC_SUMMARY Contains Everything You Need
+
+After a successful sync, the `SYNC_SUMMARY` tells you:
+- **Overall status**: `SUCCEEDED`, `FAILED`, or `PARTIAL`
+- **Output files**: Where parquet files were written (`streams[].output_file`)
+- **State file**: Where state was saved (`output.state_file`)
+- **Per-stream stats**: Records synced, duration, errors
+
+**Your backend should**:
+1. Parse the last line of output (always `SYNC_SUMMARY`)
+2. Check `summary.status` for success
+3. Read `summary.output.state_file` to know where state was saved
+4. Read `summary.streams[].output_file` to get parquet file paths
+
+---
+
+## Connector Configurations
+
+### OpenAI Billing
+
+**File**: `connectors/openai-billing.yaml`
+**Auth Type**: Bearer Token (Admin API Key required)
+**Streams**: 16
+
+**Required Config**:
+```json
+{
+  "admin_api_key": "sk-admin-...",
+  "start_time": "1701388800"
+}
+```
+
+| Field | Type | Required | Description |
+|-------|------|----------|-------------|
+| `admin_api_key` | string | yes | OpenAI Admin API Key (starts with `sk-admin-`) |
+| `start_time` | string | yes | Unix timestamp (seconds) for data start date |
+
+**Available Streams**:
+- `usage_completions` - GPT-4, GPT-3.5, o1 usage aggregated
+- `usage_completions_by_model` - Usage grouped by model
+- `usage_completions_by_project` - Usage grouped by project
+- `usage_embeddings` - Embeddings usage
+- `usage_embeddings_by_model` - Embeddings by model
+- `usage_images` - DALL-E usage
+- `usage_images_by_model` - Images by model
+- `usage_audio_speeches` - TTS usage
+- `usage_audio_transcriptions` - Whisper usage
+- `usage_moderations` - Moderation API usage
+- `usage_vector_stores` - Vector store usage
+- `usage_code_interpreter` - Code interpreter usage
+- `costs` - Daily costs matching invoices
+- `costs_by_project` - Costs by project
+- `costs_by_line_item` - Costs by line item
+
+**Example Command**:
+```bash
+solidafy-cdk read \
+  --connector connectors/openai-billing.yaml \
+  --config-json '{"admin_api_key":"sk-admin-xxx","start_time":"1701388800"}' \
+  --streams costs,usage_completions
+```
+
+---
+
+### Anthropic Billing
+
+**File**: `connectors/anthropic-billing.yaml`
+**Auth Type**: API Key Header (Admin API Key required)
+**Streams**: 17
+
+**Required Config**:
+```json
+{
+  "admin_api_key": "sk-ant-admin01-...",
+  "start_date": "2024-12-01T00:00:00Z",
+  "start_date_short": "2024-12-01"
+}
+```
+
+| Field | Type | Required | Description |
+|-------|------|----------|-------------|
+| `admin_api_key` | string | yes | Anthropic Admin API Key (starts with `sk-ant-admin`) |
+| `start_date` | string | yes | ISO 8601 datetime for usage/cost endpoints |
+| `start_date_short` | string | yes | Date only (YYYY-MM-DD) for Claude Code endpoints |
+
+**Available Streams**:
+- `organization` - Organization info
+- `usage_messages` - Messages API usage aggregated
+- `usage_messages_by_model` - Usage by model
+- `usage_messages_by_workspace` - Usage by workspace
+- `usage_messages_by_api_key` - Usage by API key
+- `usage_messages_detailed` - Full breakdown (model + workspace + tier)
+- `cost_report` - Daily costs
+- `cost_report_by_workspace` - Costs by workspace
+- `cost_report_by_line_item` - Costs by line item
+- `usage_claude_code` - Claude Code analytics
+- `usage_claude_code_by_user` - Claude Code by user
+- `workspaces` - Organization workspaces
+- `api_keys` - API keys
+- `users` - Organization members
+- `invites` - Pending invites
+
+**Example Command**:
+```bash
+solidafy-cdk read \
+  --connector connectors/anthropic-billing.yaml \
+  --config-json '{"admin_api_key":"sk-ant-admin01-xxx","start_date":"2024-12-01T00:00:00Z","start_date_short":"2024-12-01"}' \
+  --streams usage_messages,cost_report
+```
+
+---
+
+### Cloudflare Billing
+
+**File**: `connectors/cloudflare-billing.yaml`
+**Auth Type**: Bearer Token (API Token with Billing Read permission)
+**Streams**: 3
+
+**Required Config**:
+```json
+{
+  "api_token": "...",
+  "account_id": "8a63ca6ad692678ffdd8aff0b1aaaa4a"
+}
+```
+
+| Field | Type | Required | Description |
+|-------|------|----------|-------------|
+| `api_token` | string | yes | Cloudflare API Token with Account:Billing:Read permission |
+| `account_id` | string | yes | Cloudflare Account ID (32 hex characters) |
+
+**Available Streams**:
+- `account` - Account details (name, type, settings)
+- `billing_profile` - Billing profile (name, email, address)
+- `subscriptions` - Active subscriptions (Workers, R2, Pages, etc.)
+
+**Example Command**:
+```bash
+solidafy-cdk read \
+  --connector connectors/cloudflare-billing.yaml \
+  --config-json '{"api_token":"xxx","account_id":"8a63ca6ad692678ffdd8aff0b1aaaa4a"}'
+```
+
+---
+
+### Stripe
+
+**File**: `connectors/stripe.yaml`
+**Auth Type**: Bearer Token (Secret Key)
+**Streams**: 20
+
+**Required Config**:
+```json
+{
+  "api_key": "sk_live_..."
+}
+```
+
+**Optional Config**:
+```json
+{
+  "api_key": "sk_live_...",
+  "start_date_ts": "1701388800"
+}
+```
+
+| Field | Type | Required | Description |
+|-------|------|----------|-------------|
+| `api_key` | string | yes | Stripe Secret Key (sk_live_* or sk_test_*) |
+| `start_date_ts` | string | no | Unix timestamp to filter `created[gte]` |
+
+**Available Streams**:
+- Core: `customers`, `products`, `prices`
+- Payments: `charges`, `payment_intents`, `refunds`, `disputes`
+- Billing: `subscriptions`, `invoices`, `invoice_items`, `plans`, `coupons`
+- Payouts: `balance_transactions`, `payouts`, `transfers`
+- Other: `events`, `checkout_sessions`, `payment_methods`, `setup_intents`
+
+**Example Command**:
+```bash
+solidafy-cdk read \
+  --connector connectors/stripe.yaml \
+  --config-json '{"api_key":"sk_live_xxx"}' \
+  --streams customers,invoices,subscriptions
+```
+
+---
+
+### GitHub Billing
+
+**File**: `connectors/github-billing.yaml`
+**Auth Type**: Bearer Token (Personal Access Token with `admin:org` scope)
+**Streams**: 8
+
+**Required Config**:
+```json
+{
+  "access_token": "ghp_...",
+  "org": "your-organization"
+}
+```
+
+| Field | Type | Required | Description |
+|-------|------|----------|-------------|
+| `access_token` | string | yes | GitHub Personal Access Token with `admin:org` scope |
+| `org` | string | yes | GitHub organization name |
+
+**Available Streams**:
+- `actions_billing` - GitHub Actions usage and spending (minutes, paid vs included)
+- `packages_billing` - GitHub Packages storage and transfer usage
+- `shared_storage_billing` - Shared storage (LFS, Actions artifacts, Packages)
+- `copilot_billing` - GitHub Copilot billing overview
+- `copilot_seats` - Copilot seat assignments (who has access)
+- `actions_usage` - Actions usage breakdown by repository
+- `org_members` - Organization members for seat tracking
+- `org_repos` - Organization repositories for storage tracking
+
+**Example Command**:
+```bash
+solidafy-cdk read \
+  --connector github \
+  --config-json '{"access_token":"ghp_xxx","org":"my-org"}' \
+  --streams actions_billing,copilot_billing,copilot_seats
+```
+
+---
+
+## Database Connectors (PostgreSQL, MySQL, SQLite)
+
+Solidafy CDK includes native database support via embedded DuckDB. Connect to databases without YAML files - streams (tables) are discovered dynamically from the database.
+
+### Key Differences from REST API Connectors
+
+| Feature | REST API Connectors | Database Connectors |
+|---------|---------------------|---------------------|
+| **Definition** | YAML files | Native (no YAML) |
+| **Streams** | Defined in YAML | Auto-discovered from tables |
+| **Pagination** | Cursor/Offset/Page | Automatic batching |
+| **Auth** | OAuth, API Key, etc. | Connection string |
+| **Incremental** | cursor_field in YAML | cursor_fields in request |
+
+### Database Configuration
+
+**Required Config** (via connection_string):
+```json
+{
+  "connection_string": "postgresql://user:password@host:5432/database"
+}
+```
+
+**Alternative Config** (individual fields):
+```json
+{
+  "host": "localhost",
+  "port": 5432,
+  "database": "mydb",
+  "user": "postgres",
+  "password": "secret",
+  "ssl_mode": "prefer"
+}
+```
+
+### Connection String Formats
+
+| Database | Format |
+|----------|--------|
+| PostgreSQL | `postgresql://user:pass@host:5432/database` |
+| MySQL | `mysql://user:pass@host:3306/database` |
+| SQLite | `/path/to/database.db` |
+
+### HTTP API for Database Connectors
+
+Database connectors work through the same HTTP endpoints as REST API connectors:
+
+**Check Connection**:
+```bash
+curl -X POST http://localhost:8080/check \
+  -H "Content-Type: application/json" \
+  -d '{
+    "connector": "postgres",
+    "config": {"connection_string": "postgresql://user:pass@host:5432/db"}
+  }'
+```
+Response:
+```json
+{
+  "success": true,
+  "data": {
+    "type": "CONNECTION_STATUS",
+    "connectionStatus": {
+      "status": "SUCCEEDED",
+      "message": "Connection successful. Found 42 tables."
+    }
+  }
+}
+```
+
+**Discover Tables (Streams)**:
+```bash
+curl -X POST http://localhost:8080/streams \
+  -H "Content-Type: application/json" \
+  -d '{
+    "connector": "postgres",
+    "config": {"connection_string": "postgresql://user:pass@host:5432/db"}
+  }'
+```
+Response:
+```json
+{
+  "success": true,
+  "data": {
+    "type": "STREAMS",
+    "connector": "postgres",
+    "connector_type": "database",
+    "streams": ["public.users", "public.orders", "public.products"]
+  }
+}
+```
+
+**Sync Tables to JSON**:
+```bash
+curl -X POST http://localhost:8080/sync \
+  -H "Content-Type: application/json" \
+  -d '{
+    "connector": "postgres",
+    "config": {"connection_string": "postgresql://..."},
+    "streams": ["public.users", "public.orders"],
+    "format": "json"
+  }'
+```
+Response:
+```json
+{
+  "success": true,
+  "data": {
+    "type": "SYNC_RESULT",
+    "result": {
+      "status": "SUCCEEDED",
+      "connector": "postgres",
+      "connector_type": "database",
+      "total_records": 150,
+      "total_streams": 2,
+      "successful_streams": 2,
+      "failed_streams": 0,
+      "duration_ms": 450,
+      "streams": [
+        {"stream": "public.users", "status": "SUCCESS", "records_synced": 50, "duration_ms": 200},
+        {"stream": "public.orders", "status": "SUCCESS", "records_synced": 100, "duration_ms": 250}
+      ],
+      "state": {},
+      "records": [
+        {"stream": "public.users", "data": {"id": 1, "email": "..."}, "emitted_at": 1702500000000}
+      ]
+    }
+  }
+}
+```
+
+**Sync with Incremental Cursor**:
+```bash
+curl -X POST http://localhost:8080/sync \
+  -H "Content-Type: application/json" \
+  -d '{
+    "connector": "postgres",
+    "config": {"connection_string": "postgresql://..."},
+    "streams": ["public.orders"],
+    "format": "json",
+    "cursor_fields": {
+      "public.orders": "created_at"
+    }
+  }'
+```
+Response includes cursor state:
+```json
+{
+  "data": {
+    "result": {
+      "status": "SUCCEEDED",
+      "total_records": 100,
+      "streams": [
+        {
+          "stream": "public.orders",
+          "status": "SUCCESS",
+          "records_synced": 100,
+          "cursor_value": "2024-12-15T10:30:00Z"
+        }
+      ],
+      "state": {
+        "public.orders": {"cursor": "2024-12-15T10:30:00Z"}
+      }
+    }
+  }
+}
+```
+
+**Incremental Sync (using previous state)**:
+```bash
+curl -X POST http://localhost:8080/sync \
+  -H "Content-Type: application/json" \
+  -d '{
+    "connector": "postgres",
+    "config": {"connection_string": "postgresql://..."},
+    "streams": ["public.orders"],
+    "cursor_fields": {"public.orders": "created_at"},
+    "state": {"public.orders": {"cursor": "2024-12-15T10:30:00Z"}}
+  }'
+# Only returns records where created_at > "2024-12-15T10:30:00Z"
+```
+
+**Sync to Parquet (Cloud)**:
+```bash
+curl -X POST http://localhost:8080/sync \
+  -H "Content-Type: application/json" \
+  -d '{
+    "connector": "postgres",
+    "config": {"connection_string": "postgresql://..."},
+    "streams": ["public.orders"],
+    "format": "parquet",
+    "output": "s3://my-bucket/postgres/"
+  }'
+```
+
+### GET /connectors Response for Databases
+
+Database connectors have `streams_dynamic: true` indicating tables must be discovered:
+
+```json
+{
+  "name": "postgres",
+  "description": "PostgreSQL database tables via DuckDB",
+  "category": "Database",
+  "aliases": ["postgresql"],
+  "streams": null,
+  "streams_dynamic": true,
+  "streams_hint": "Call POST /streams with connection config to discover tables",
+  "config_schema": [
+    {"name": "connection_string", "type": "string", "required": true, "secret": true, "description": "PostgreSQL connection string"}
+  ]
+}
+```
+
+### Database Sync Request Fields
+
+| Field | Type | Required | Description |
+|-------|------|----------|-------------|
+| `connector` | string | Yes | `postgres`, `mysql`, or `sqlite` |
+| `config` | object | Yes | Connection config (connection_string or individual fields) |
+| `streams` | array | No | Tables to sync (default: all tables) |
+| `format` | string | No | `json` or `parquet` (default: json) |
+| `output` | string | No | Cloud destination for parquet (s3://, r2://, gs://, az://) |
+| `cursor_fields` | object | No | Map of table name to cursor column: `{"public.orders": "created_at"}` |
+| `state` | object | No | Previous state for incremental sync |
+| `max_records` | number | No | Batch size per table (default: 10000) |
+
+---
+
+## CLI Commands
+
+### list
+List all built-in connectors embedded in the binary.
+```bash
+solidafy-cdk list
+```
+Returns:
+```json
+{"type":"CONNECTORS","connectors":[{"name":"stripe","description":"Stripe payments...","category":"Payments","aliases":[]},...]}
+```
+
+### check
+Test API connection.
+```bash
+solidafy-cdk check --connector stripe --config-json '{"api_key":"sk_..."}'
+solidafy-cdk check --connector ./custom.yaml --config-json '<JSON>'
+```
+
+### streams
+List available stream names (lightweight, no schemas - faster than discover).
+```bash
+solidafy-cdk streams --connector stripe
+```
+Returns:
+```json
+{"type":"STREAMS","streams":["customers","charges","invoices"],"connector":"stripe"}
+```
+
+### discover
+List available streams with full JSON schemas.
+```bash
+solidafy-cdk discover --connector <YAML> --config-json '<JSON>' [--sample <N>]
+```
+
+### read
+Sync data from streams.
+```bash
+solidafy-cdk read \
+  --connector <YAML> \
+  --config-json '<JSON>' \
+  [--streams stream1,stream2] \
+  [--state-json '<STATE_JSON>'] \
+  [--state <STATE_FILE>] \
+  [--output <PATH_OR_CLOUD_URL>] \
+  [--format json|parquet] \
+  [--max-records <N>]
+```
+
+**Output supports local paths and cloud URLs:**
+- Local: `--output /data/stripe/`
+- S3: `--output s3://bucket/path/`
+- R2: `--output r2://bucket/path/` (requires `AWS_ENDPOINT`)
+- GCS: `--output gs://bucket/path/`
+- Azure: `--output az://container/path/`
+
+### validate
+Validate connector YAML syntax.
+```bash
+solidafy-cdk validate --connector <YAML>
+```
+
+### spec
+Show connector specification.
+```bash
+solidafy-cdk spec --connector <YAML>
+```
+
+### serve
+Start HTTP server mode for REST API access. Built-in connectors are available automatically.
+```bash
+solidafy-cdk serve --port 8080
+```
+
+---
+
+## HTTP Server Mode
+
+For frontend/backend integration, run solidafy-cdk as an HTTP server.
+**Built-in connectors are embedded** - no `--connectors-dir` needed for supported connectors.
+
+```bash
+solidafy-cdk serve --port 8080
+```
+
+### REST Endpoints
+
+| Method | Endpoint | Description |
+|--------|----------|-------------|
+| GET | `/health` | Health check |
+| GET | `/connectors` | List built-in connectors with metadata |
+| GET | `/connectors/:name/streams` | Get stream names (use built-in name like `stripe`, `openai`) |
+| POST | `/streams` | Get stream names (with body) |
+| POST | `/check` | Test API connection |
+| POST | `/discover` | Get full catalog with schemas |
+| POST | `/sync` | **Sync data from a connector** (full read operation via HTTP) |
+
+### Request/Response Examples
+
+#### GET /health
+```bash
+curl http://localhost:8080/health
+```
+Response:
+```json
+{"status":"ok"}
+```
+
+#### GET /connectors
+Returns built-in connectors with **everything needed to configure and run them**:
+- `config_schema`: Required fields for configuration (with types, descriptions, secrets)
+- `streams`: Available data streams
+- `aliases`: Alternative connector names
+
+**This single endpoint gives your frontend everything needed to render connector selection and configuration forms.**
+
+```bash
+curl http://localhost:8080/connectors
+```
+Response:
+```json
+{
+  "success": true,
+  "data": {
+    "type": "CONNECTORS",
+    "connectors": [
+      {
+        "name": "stripe",
+        "description": "Stripe payments, customers, invoices, subscriptions",
+        "category": "Payments",
+        "aliases": [],
+        "config_schema": [
+          {"name": "api_key", "type": "string", "required": true, "secret": true, "description": "Stripe API key (sk_live_... or sk_test_...)", "default": null}
+        ],
+        "streams": ["customers", "products", "prices", "charges", "payment_intents", "refunds", "disputes", "subscriptions", "invoices", "invoice_items", "plans", "coupons", "balance_transactions", "payouts", "transfers", "events", "checkout_sessions", "payment_methods", "setup_intents"]
+      },
+      {
+        "name": "github",
+        "description": "GitHub Actions, Copilot, Packages billing and usage",
+        "category": "Developer Tools",
+        "aliases": ["github-billing"],
+        "config_schema": [
+          {"name": "access_token", "type": "string", "required": true, "secret": true, "description": "GitHub Personal Access Token with admin:org scope", "default": null},
+          {"name": "org", "type": "string", "required": true, "secret": false, "description": "GitHub organization name", "default": null}
+        ],
+        "streams": ["actions_billing", "packages_billing", "shared_storage_billing", "copilot_billing", "copilot_seats", "actions_usage", "org_members", "org_repos"]
+      }
+    ]
+  }
+}
+```
+
+#### GET /connectors/:name/streams
+```bash
+curl http://localhost:8080/connectors/stripe/streams
+```
+Response:
+```json
+{
+  "success": true,
+  "data": {
+    "type": "STREAMS",
+    "connector": "stripe",
+    "streams": ["customers", "charges", "invoices", "subscriptions"]
+  }
+}
+```
+
+#### POST /check
+```bash
+curl -X POST http://localhost:8080/check \
+  -H "Content-Type: application/json" \
+  -d '{"connector":"stripe","config":{"api_key":"sk_live_..."}}'
+```
+Response (success):
+```json
+{
+  "success": true,
+  "data": {
+    "type": "CONNECTION_STATUS",
+    "connectionStatus": {
+      "status": "SUCCEEDED",
+      "message": "Connection successful"
+    }
+  }
+}
+```
+Response (failure):
+```json
+{
+  "success": true,
+  "data": {
+    "type": "CONNECTION_STATUS",
+    "connectionStatus": {
+      "status": "FAILED",
+      "message": "Connection failed: HTTP 401: Invalid API Key"
+    }
+  }
+}
+```
+
+#### POST /streams
+```bash
+curl -X POST http://localhost:8080/streams \
+  -H "Content-Type: application/json" \
+  -d '{"connector":"stripe","config":{}}'
+```
+Response:
+```json
+{
+  "success": true,
+  "data": {
+    "type": "STREAMS",
+    "connector": "stripe",
+    "streams": ["customers", "charges", "invoices"]
+  }
+}
+```
+
+#### POST /discover
+```bash
+curl -X POST http://localhost:8080/discover \
+  -H "Content-Type: application/json" \
+  -d '{"connector":"stripe","config":{"api_key":"sk_live_..."},"sample":0}'
+```
+Response:
+```json
+{
+  "success": true,
+  "data": {
+    "type": "CATALOG",
+    "catalog": {
+      "streams": [
+        {
+          "name": "customers",
+          "json_schema": {"type":"object","properties":{},"additionalProperties":true},
+          "supported_sync_modes": ["full_refresh", "incremental"],
+          "source_defined_cursor": true,
+          "default_cursor_field": ["created"],
+          "source_defined_primary_key": [["id"]]
+        }
+      ]
+    }
+  }
+}
+```
+
+#### POST /sync
+**Full data sync via HTTP.** This is the main endpoint for extracting data.
+
+Request body:
+```json
+{
+  "connector": "stripe",
+  "config": {"api_key": "sk_live_..."},
+  "streams": ["customers", "invoices"],  // optional, syncs all if omitted
+  "output": "s3://my-bucket/stripe/",     // optional cloud destination
+  "format": "json",                        // "json" or "parquet"
+  "state": {"streams": {...}},             // optional, for incremental sync
+  "max_records": 1000                      // optional limit
+}
+```
+
+**Example - JSON format (records in response)**:
+```bash
+curl -X POST http://localhost:8080/sync \
+  -H "Content-Type: application/json" \
+  -d '{
+    "connector": "stripe",
+    "config": {"api_key": "sk_test_..."},
+    "streams": ["customers"],
+    "format": "json",
+    "max_records": 10
+  }'
+```
+
+Response:
+```json
+{
+  "success": true,
+  "data": {
+    "type": "SYNC_RESULT",
+    "result": {
+      "status": "SUCCEEDED",
+      "connector": "stripe",
+      "total_records": 10,
+      "total_streams": 1,
+      "successful_streams": 1,
+      "failed_streams": 0,
+      "duration_ms": 1250,
+      "output": {
+        "format": "json",
+        "destination": null
+      },
+      "streams": [
+        {
+          "stream": "customers",
+          "status": "SUCCESS",
+          "records_synced": 10,
+          "duration_ms": 1250
+        }
+      ],
+      "state": {
+        "streams": {
+          "customers": {"cursor": "2024-12-01T00:00:00Z"}
+        }
+      },
+      "records": [
+        {"stream": "customers", "data": {"id": "cus_1", "email": "a@example.com"}, "emitted_at": 1702500000000},
+        {"stream": "customers", "data": {"id": "cus_2", "email": "b@example.com"}, "emitted_at": 1702500000000}
+      ]
+    }
+  }
+}
+```
+
+**Example - Parquet to S3**:
+```bash
+curl -X POST http://localhost:8080/sync \
+  -H "Content-Type: application/json" \
+  -d '{
+    "connector": "stripe",
+    "config": {"api_key": "sk_live_..."},
+    "streams": ["customers", "invoices"],
+    "format": "parquet",
+    "output": "s3://my-datalake/stripe/"
+  }'
+```
+
+Response:
+```json
+{
+  "success": true,
+  "data": {
+    "type": "SYNC_RESULT",
+    "result": {
+      "status": "SUCCEEDED",
+      "connector": "stripe",
+      "total_records": 1500,
+      "total_streams": 2,
+      "successful_streams": 2,
+      "failed_streams": 0,
+      "duration_ms": 12500,
+      "output": {
+        "format": "parquet",
+        "destination": "s3://my-datalake/stripe/"
+      },
+      "streams": [
+        {
+          "stream": "customers",
+          "status": "SUCCESS",
+          "records_synced": 500,
+          "duration_ms": 3200,
+          "output_file": "s3://customers.parquet"
+        },
+        {
+          "stream": "invoices",
+          "status": "SUCCESS",
+          "records_synced": 1000,
+          "duration_ms": 9300,
+          "output_file": "s3://invoices.parquet"
+        }
+      ],
+      "state": {
+        "streams": {
+          "customers": {"cursor": "2024-12-01T00:00:00Z"},
+          "invoices": {"cursor": "2024-12-01T00:00:00Z"}
+        }
+      },
+      "records": null
+    }
+  }
+}
+```
+
+**Example - Incremental sync (pass previous state)**:
+```bash
+curl -X POST http://localhost:8080/sync \
+  -H "Content-Type: application/json" \
+  -d '{
+    "connector": "stripe",
+    "config": {"api_key": "sk_live_..."},
+    "streams": ["customers"],
+    "state": {
+      "streams": {
+        "customers": {"cursor": "2024-12-01T00:00:00Z"}
+      }
+    }
+  }'
+```
+
+### Frontend Integration Flow
+
+**Simple approach - everything via HTTP API:**
+
+1. **Get all connectors**: `GET /connectors`
+   - Returns connector list with `config_schema` and `streams` included
+   - Your frontend has everything needed to render selection UI and config forms
+2. **Test connection**: `POST /check` with user-entered credentials
+3. **Run sync**: `POST /sync` with connector, config, and stream selection
+   - Returns records in response (JSON format) or writes to cloud (Parquet format)
+   - Returns state for incremental sync on next run
+
+**That's it!** No CLI needed - the entire flow can be done via HTTP.
+
+The `/connectors` endpoint returns:
+- Available connectors with descriptions and categories
+- Config fields (name, type, required, secret, description) for form generation
+- Available streams for each connector
+
+No need to call multiple endpoints - your backend just calls `/connectors` once and has everything.
+
+---
+
+## Output Message Protocol
+
+The CLI outputs newline-delimited JSON messages to stdout. Each message has a
+`type` field. Parse each line as JSON.
+
+### Message Types
+
+#### LOG
+Informational messages during sync.
+```json
+{
+  "type": "LOG",
+  "log": {
+    "level": "INFO|DEBUG|WARN|ERROR",
+    "message": "Human-readable message"
+  }
+}
+```
+
+#### RECORD
+Data records from a stream.
+```json
+{
+  "type": "RECORD",
+  "record": {
+    "stream": "customers",
+    "data": { "id": "cus_123", "email": "..." },
+    "emitted_at": 1702500000000
+  }
+}
+```
+
+#### STATE (Stream-level)
+Emitted during sync with per-stream state (for incremental).
+```json
+{
+  "type": "STATE",
+  "state": {
+    "type": "STREAM",
+    "stream": {
+      "stream_descriptor": { "name": "customers" },
+      "stream_state": { "cursor": "2024-12-01T00:00:00Z" }
+    }
+  }
+}
+```
+
+#### STATE (Global/Final)
+Emitted at the end of a sync run with complete state.
+```json
+{
+  "type": "STATE",
+  "state": {
+    "streams": {
+      "customers": { "cursor": "2024-12-01T00:00:00Z" },
+      "invoices": { "cursor": "2024-12-01T00:00:00Z" }
+    }
+  }
+}
+```
+
+#### CONNECTION_STATUS
+Result of `check` command.
+```json
+{
+  "type": "CONNECTION_STATUS",
+  "connectionStatus": {
+    "status": "SUCCEEDED|FAILED",
+    "message": "Connection successful"
+  }
+}
+```
+
+#### STREAMS
+Result of `streams` command. Lightweight alternative to CATALOG when you only need stream names.
+```json
+{
+  "type": "STREAMS",
+  "connector": "stripe",
+  "streams": ["customers", "charges", "invoices", "subscriptions"]
+}
+```
+
+#### CATALOG
+Result of `discover` command.
+```json
+{
+  "type": "CATALOG",
+  "catalog": {
+    "streams": [
+      {
+        "name": "customers",
+        "json_schema": { "type": "object", "properties": {...} },
+        "supported_sync_modes": ["full_refresh", "incremental"],
+        "source_defined_cursor": true,
+        "default_cursor_field": ["created"],
+        "source_defined_primary_key": [["id"]]
+      }
+    ]
+  }
+}
+```
+
+#### SYNC_SUMMARY
+**Always the last message** after a `read` command. Use this to determine overall success.
+```json
+{
+  "type": "SYNC_SUMMARY",
+  "summary": {
+    "status": "SUCCEEDED|FAILED|PARTIAL",
+    "connector": "stripe",
+    "total_records": 1500,
+    "total_streams": 3,
+    "successful_streams": 3,
+    "failed_streams": 0,
+    "duration_ms": 12500,
+    "output": {
+      "format": "parquet",
+      "directory": "/data/stripe",
+      "state_file": "/data/stripe/state.json"
+    },
+    "streams": [
+      {
+        "stream": "customers",
+        "status": "SUCCESS",
+        "records_synced": 500,
+        "duration_ms": 3200,
+        "output_file": "/data/stripe/customers/dt=2025-12-14/data.parquet"
+      },
+      {
+        "stream": "invoices",
+        "status": "SUCCESS",
+        "records_synced": 1000,
+        "duration_ms": 8500,
+        "output_file": "/data/stripe/invoices/dt=2025-12-14/data.parquet"
+      },
+      {
+        "stream": "payments",
+        "status": "FAILED",
+        "error": "HTTP 401: Unauthorized",
+        "records_synced": 0,
+        "duration_ms": 800
+      }
+    ]
+  }
+}
+```
+
+**Output Fields** (always present):
+- `output.format`: `"json"`, `"pretty"`, or `"parquet"`
+- `output.directory`: Output directory path (null if not specified)
+- `output.state_file`: State file path (null if not specified)
+
+**Per-Stream Fields**:
+- `output_file`: Full path to parquet file (only when format=parquet and directory specified)
+- `error`: Error message (only when status=FAILED)
+
+**Status Values**:
+- `SUCCEEDED`: All streams synced successfully
+- `FAILED`: All streams failed
+- `PARTIAL`: Some streams succeeded, some failed
+
+---
+
+## Incremental Sync Protocol
+
+### First Sync
+Run without state:
+```bash
+solidafy-cdk read --connector connector.yaml --config-json '...'
+```
+Capture the final STATE message and store it.
+
+### Subsequent Syncs
+Pass previous state:
+```bash
+solidafy-cdk read \
+  --connector connector.yaml \
+  --config-json '...' \
+  --state-json '{"streams":{"customers":{"cursor":"2024-12-01T00:00:00Z"}}}'
+```
+
+### State Structure
+```json
+{
+  "streams": {
+    "<stream_name>": {
+      "cursor": "<max_cursor_value>",
+      "partitions": {
+        "<partition_id>": {
+          "completed": true,
+          "cursor": "<cursor>"
+        }
+      }
+    }
+  }
+}
+```
+
+---
+
+## Output Formats
+
+### JSON (default)
+```bash
+--format json
+```
+Records output as newline-delimited JSON to stdout.
+
+### Parquet (Local)
+```bash
+--format parquet --output /path/to/dir
+```
+Creates Hive-style partitioned files in the output directory:
+```
+/path/to/dir/
+├── customers/
+│   └── dt=2025-12-14/
+│       └── data.parquet
+└── orders/
+    └── dt=2025-12-14/
+        └── data.parquet
+```
+
+**Why Hive partitioning?**
+- Query optimization: Tools like DuckDB, Spark, Athena can prune partitions
+- Incremental loads: Each day's data is isolated for easy reload/delete
+- Standard format: Compatible with data lake tools and cataloging systems
+- Time travel: Keep historical snapshots by date
+
+The partition uses **ingestion date** (`dt=YYYY-MM-DD`), not the data's timestamp.
+
+### Parquet (Cloud Storage)
+
+Output directly to cloud storage without local filesystem. Supports S3, R2, GCS, and Azure.
+
+**AWS S3**:
+```bash
+solidafy-cdk read --connector stripe --config-json '...' \
+  --format parquet --output s3://my-bucket/stripe/
+```
+
+**Cloudflare R2** (S3-compatible):
+```bash
+AWS_ENDPOINT=https://ACCOUNT_ID.r2.cloudflarestorage.com \
+solidafy-cdk read --connector stripe --config-json '...' \
+  --format parquet --output r2://my-bucket/stripe/
+```
+
+**Google Cloud Storage**:
+```bash
+solidafy-cdk read --connector stripe --config-json '...' \
+  --format parquet --output gs://my-bucket/stripe/
+```
+
+**Azure Blob Storage**:
+```bash
+solidafy-cdk read --connector stripe --config-json '...' \
+  --format parquet --output az://my-container/stripe/
+```
+
+### Cloud Storage Environment Variables
+
+| Provider | Variable | Description |
+|----------|----------|-------------|
+| **S3** | `AWS_ACCESS_KEY_ID` | Access key ID |
+| | `AWS_SECRET_ACCESS_KEY` | Secret access key |
+| | `AWS_DEFAULT_REGION` | Region (e.g., `us-east-1`) |
+| | `AWS_SESSION_TOKEN` | Session token (for temporary credentials) |
+| | `AWS_ENDPOINT` | Custom endpoint URL (for S3-compatible services) |
+| **R2** | `AWS_ACCESS_KEY_ID` | R2 access key ID |
+| | `AWS_SECRET_ACCESS_KEY` | R2 secret access key |
+| | `AWS_ENDPOINT` | **Required**: `https://<ACCOUNT_ID>.r2.cloudflarestorage.com` |
+| **GCS** | `GOOGLE_SERVICE_ACCOUNT` | Path to service account JSON file |
+| | `GOOGLE_SERVICE_ACCOUNT_KEY` | Service account JSON as string (alternative) |
+| **Azure** | `AZURE_STORAGE_ACCOUNT_NAME` | Storage account name |
+| | `AZURE_STORAGE_ACCOUNT_KEY` | Storage account key |
+| | `AZURE_STORAGE_SAS_TOKEN` | SAS token (alternative to account key) |
+| | `AZURE_STORAGE_TOKEN` | Bearer token (alternative) |
+
+### Output URL Formats
+
+| Format | Example |
+|--------|---------|
+| Local | `/data/stripe/` or `./output/` |
+| S3 | `s3://bucket-name/path/prefix/` |
+| R2 | `r2://bucket-name/path/prefix/` |
+| GCS | `gs://bucket-name/path/prefix/` |
+| Azure | `az://container-name/path/prefix/` |
+
+---
+
+## Parsing Output (Code Examples)
+
+### Python (Parquet with state file - Recommended)
+```python
+import subprocess
+import json
+
+result = subprocess.run([
+    'solidafy-cdk', 'read',
+    '--connector', 'connectors/stripe.yaml',
+    '--config-json', '{"api_key":"sk_live_xxx"}',
+    '--streams', 'customers,invoices',
+    '--format', 'parquet',
+    '--output', '/data/stripe',
+    '--state', '/data/stripe/state.json'
+], capture_output=True, text=True)
+
+# Parse SYNC_SUMMARY (always the last line)
+sync_summary = None
+for line in result.stdout.strip().split('\n'):
+    if not line:
+        continue
+    msg = json.loads(line)
+    if msg['type'] == 'SYNC_SUMMARY':
+        sync_summary = msg['summary']
+
+# SYNC_SUMMARY contains everything you need
+print(f"Status: {sync_summary['status']}")
+print(f"Total records: {sync_summary['total_records']}")
+print(f"Duration: {sync_summary['duration_ms']}ms")
+
+# Get file paths directly from SYNC_SUMMARY
+print(f"\nOutput format: {sync_summary['output']['format']}")
+print(f"Output directory: {sync_summary['output']['directory']}")
+print(f"State file: {sync_summary['output']['state_file']}")
+
+# Get per-stream parquet files
+print("\nStream results:")
+for stream in sync_summary['streams']:
+    if stream['status'] == 'SUCCESS':
+        print(f"  OK: {stream['stream']}")
+        print(f"      File: {stream.get('output_file', 'N/A')}")
+        print(f"      Records: {stream['records_synced']}")
+    else:
+        print(f"  FAILED: {stream['stream']} - {stream['error']}")
+```
+
+### Node.js
+```javascript
+const { spawn } = require('child_process');
+
+const cdk = spawn('solidafy-cdk', [
+  'read',
+  '--connector', 'connectors/stripe.yaml',
+  '--config-json', '{"api_key":"sk_live_xxx"}',
+  '--streams', 'customers,invoices',
+  '--format', 'parquet',
+  '--output', '/data/stripe',
+  '--state', '/data/stripe/state.json'
+]);
+
+let syncSummary = null;
+
+cdk.stdout.on('data', (data) => {
+  data.toString().split('\n').filter(Boolean).forEach(line => {
+    const msg = JSON.parse(line);
+    if (msg.type === 'SYNC_SUMMARY') {
+      syncSummary = msg.summary;
+    }
+  });
+});
+
+cdk.on('close', (code) => {
+  if (syncSummary) {
+    console.log(`Status: ${syncSummary.status}`);
+    console.log(`Total records: ${syncSummary.total_records}`);
+    console.log(`Duration: ${syncSummary.duration_ms}ms`);
+
+    // File paths from SYNC_SUMMARY
+    console.log(`\nOutput format: ${syncSummary.output.format}`);
+    console.log(`Output directory: ${syncSummary.output.directory}`);
+    console.log(`State file: ${syncSummary.output.state_file}`);
+
+    // Per-stream parquet files
+    console.log('\nStream results:');
+    syncSummary.streams.forEach(s => {
+      if (s.status === 'SUCCESS') {
+        console.log(`  OK: ${s.stream}`);
+        console.log(`      File: ${s.output_file || 'N/A'}`);
+        console.log(`      Records: ${s.records_synced}`);
+      } else {
+        console.log(`  FAILED: ${s.stream} - ${s.error}`);
+      }
+    });
+  }
+});
+```
+
+### Bash (jq)
+```bash
+# Run sync with parquet output
+solidafy-cdk read \
+  --connector connectors/stripe.yaml \
+  --config-json '{"api_key":"sk_live_xxx"}' \
+  --streams customers,invoices \
+  --format parquet \
+  --output /data/stripe \
+  --state /data/stripe/state.json > output.jsonl
+
+# Get SYNC_SUMMARY (always last line)
+SUMMARY=$(tail -1 output.jsonl)
+
+# Check status
+echo $SUMMARY | jq -r '.summary.status'
+
+# Get all file paths from SYNC_SUMMARY
+echo $SUMMARY | jq -r '.summary.output.state_file'
+echo $SUMMARY | jq -r '.summary.streams[].output_file'
+```
+
+---
+
+## Quick Reference
+
+### Config Templates
+
+**OpenAI**:
+```json
+{"admin_api_key":"sk-admin-...","start_time":"1701388800"}
+```
+
+**Anthropic**:
+```json
+{"admin_api_key":"sk-ant-admin...","start_date":"2024-12-01T00:00:00Z","start_date_short":"2024-12-01"}
+```
+
+**Cloudflare**:
+```json
+{"api_token":"...","account_id":"..."}
+```
+
+**Stripe**:
+```json
+{"api_key":"sk_live_..."}
+```
+
+**GitHub**:
+```json
+{"access_token":"ghp_...","org":"your-organization"}
+```
+
+### Common Patterns
+
+**Sync all streams**:
+```bash
+solidafy-cdk read -c connector.yaml --config-json '...'
+```
+
+**Sync specific streams**:
+```bash
+solidafy-cdk read -c connector.yaml --config-json '...' --streams a,b,c
+```
+
+**Incremental sync**:
+```bash
+solidafy-cdk read -c connector.yaml --config-json '...' --state-json '{...}'
+```
+
+**Parquet output (local)**:
+```bash
+solidafy-cdk read -c connector.yaml --config-json '...' -f parquet -o /data
+```
+
+**Parquet output (S3)**:
+```bash
+solidafy-cdk read -c connector.yaml --config-json '...' -f parquet -o s3://bucket/path/
+```
+
+**Parquet output (R2)**:
+```bash
+AWS_ENDPOINT=https://ACCOUNT_ID.r2.cloudflarestorage.com \
+solidafy-cdk read -c connector.yaml --config-json '...' -f parquet -o r2://bucket/path/
+```
+
+**Limit records**:
+```bash
+solidafy-cdk read -c connector.yaml --config-json '...' --max-records 100
+```
+
+---
+
+## Message Order (read command)
+
+Messages are emitted in this order:
+
+1. **LOG (INFO)**: "Starting sync for stream: X" - one per stream
+2. **LOG (DEBUG)**: "Page N: fetched M records" - during pagination
+3. **RECORD**: Data records (may be batched)
+4. **STATE (per-stream)**: Cursor updates during sync
+5. **LOG (INFO)**: "Completed sync for X: N records in M pages"
+6. (Repeat 1-5 for each stream)
+7. **STATE (global)**: Final state with all stream cursors
+8. **SYNC_SUMMARY**: Always last - overall sync result
+
+**For robust parsing, always look for SYNC_SUMMARY as the final message.**
+
+---
+
+## Exit Codes
+
+| Code | Meaning |
+|------|---------|
+| 0 | Success (even if some streams failed - check SYNC_SUMMARY) |
+| 1 | Fatal error before sync could complete |
+
+---
+
+## Error Handling
+
+Errors appear in multiple places:
+
+1. **Exit code 1**: Fatal startup errors (invalid config, missing connector file)
+2. **LOG ERROR messages**: Per-stream errors during sync
+3. **SYNC_SUMMARY**: Aggregated status with per-stream success/failure
+
+**Best Practice**: Always parse the full output and check SYNC_SUMMARY for reliable status.
+
+```python
+# Example: Reliable error detection
+for line in stdout.split('\n'):
+    msg = json.loads(line)
+    if msg['type'] == 'SYNC_SUMMARY':
+        if msg['summary']['status'] == 'FAILED':
+            raise Exception(f"Sync failed: {msg['summary']}")
+        elif msg['summary']['status'] == 'PARTIAL':
+            failed = [s for s in msg['summary']['streams'] if s['status'] == 'FAILED']
+            print(f"Warning: {len(failed)} streams failed")
+```
+
+---
+
+## Complete Message Schema Reference
+
+### RECORD Schema
+```json
+{
+  "type": "RECORD",
+  "record": {
+    "stream": "string - stream name",
+    "data": "object - the actual record data",
+    "emitted_at": "number - Unix timestamp in milliseconds"
+  }
+}
+```
+
+### STATE Schema (Final)
+```json
+{
+  "type": "STATE",
+  "state": {
+    "streams": {
+      "<stream_name>": {
+        "cursor": "string - max cursor value from records"
+      }
+    }
+  }
+}
+```
+
+### SYNC_SUMMARY Schema
+```json
+{
+  "type": "SYNC_SUMMARY",
+  "summary": {
+    "status": "SUCCEEDED | FAILED | PARTIAL",
+    "connector": "string - connector name from YAML",
+    "total_records": "number - total records across all streams",
+    "total_streams": "number - streams attempted",
+    "successful_streams": "number - streams that succeeded",
+    "failed_streams": "number - streams that failed",
+    "duration_ms": "number - total sync duration in milliseconds",
+    "output": {
+      "format": "json | pretty | parquet",
+      "directory": "string | null - output directory if --output specified",
+      "state_file": "string | null - state file path if --state specified"
+    },
+    "streams": [
+      {
+        "stream": "string - stream name",
+        "status": "SUCCESS | FAILED",
+        "records_synced": "number - records synced for this stream",
+        "duration_ms": "number - stream sync duration",
+        "output_file": "string | undefined - parquet file path (only for parquet format)",
+        "error": "string | undefined - error message (only if FAILED)"
+      }
+    ]
+  }
+}
+```
+
+### CONNECTION_STATUS Schema
+```json
+{
+  "type": "CONNECTION_STATUS",
+  "connectionStatus": {
+    "status": "SUCCEEDED | FAILED",
+    "message": "string - human readable message"
+  }
+}
+```
+
+### LOG Schema
+```json
+{
+  "type": "LOG",
+  "log": {
+    "level": "DEBUG | INFO | WARN | ERROR",
+    "message": "string - log message"
+  }
+}
+```
+
+---
+
+## Determining Success
+
+**For `read` command**: Parse the last line (SYNC_SUMMARY) and check:
+- `summary.status === "SUCCEEDED"` → All streams synced
+- `summary.status === "PARTIAL"` → Some streams failed, check `streams` array
+- `summary.status === "FAILED"` → All streams failed
+
+**For `check` command**: Parse CONNECTION_STATUS and check:
+- `connectionStatus.status === "SUCCEEDED"` → Connection works
+
+**Exit code 0 does NOT guarantee all streams succeeded** - always check SYNC_SUMMARY.

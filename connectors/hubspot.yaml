@@ -1,0 +1,291 @@
+name: hubspot
+version: "1.0.0"
+base_url: "https://api.hubapi.com"
+
+auth:
+  type: oauth2_refresh_token
+  token_url: "https://api.hubapi.com/oauth/v1/token"
+  client_id: "{{ config.client_id }}"
+  client_secret: "{{ config.client_secret }}"
+  refresh_token: "{{ config.refresh_token }}"
+
+http:
+  timeout_secs: 30
+  max_retries: 3
+  rate_limit_rps: 10  # HubSpot has 100/10sec burst, 10/sec sustained
+
+check:
+  path: /crm/v3/objects/contacts
+  params:
+    limit: "1"
+
+headers:
+  Content-Type: application/json
+
+streams:
+  # ============================================================================
+  # CRM Objects
+  # ============================================================================
+
+  - name: contacts
+    request:
+      path: /crm/v3/objects/contacts
+      params:
+        limit: "100"
+        properties: "firstname,lastname,email,phone,company,website,lifecyclestage,hs_lead_status,createdate,lastmodifieddate"
+    decoder:
+      type: json
+      records_path: results
+    pagination:
+      type: cursor
+      cursor_param: after
+      cursor_path: paging.next.after
+    primary_key:
+      - id
+    cursor_field: updatedAt
+
+  - name: companies
+    request:
+      path: /crm/v3/objects/companies
+      params:
+        limit: "100"
+        properties: "name,domain,industry,phone,city,state,country,numberofemployees,annualrevenue,createdate,hs_lastmodifieddate"
+    decoder:
+      type: json
+      records_path: results
+    pagination:
+      type: cursor
+      cursor_param: after
+      cursor_path: paging.next.after
+    primary_key:
+      - id
+    cursor_field: updatedAt
+
+  - name: deals
+    request:
+      path: /crm/v3/objects/deals
+      params:
+        limit: "100"
+        properties: "dealname,amount,dealstage,pipeline,closedate,createdate,hs_lastmodifieddate,hubspot_owner_id"
+    decoder:
+      type: json
+      records_path: results
+    pagination:
+      type: cursor
+      cursor_param: after
+      cursor_path: paging.next.after
+    primary_key:
+      - id
+    cursor_field: updatedAt
+
+  - name: tickets
+    request:
+      path: /crm/v3/objects/tickets
+      params:
+        limit: "100"
+        properties: "subject,content,hs_pipeline,hs_pipeline_stage,hs_ticket_priority,createdate,hs_lastmodifieddate"
+    decoder:
+      type: json
+      records_path: results
+    pagination:
+      type: cursor
+      cursor_param: after
+      cursor_path: paging.next.after
+    primary_key:
+      - id
+    cursor_field: updatedAt
+
+  - name: products
+    request:
+      path: /crm/v3/objects/products
+      params:
+        limit: "100"
+        properties: "name,description,price,hs_sku,createdate,hs_lastmodifieddate"
+    decoder:
+      type: json
+      records_path: results
+    pagination:
+      type: cursor
+      cursor_param: after
+      cursor_path: paging.next.after
+    primary_key:
+      - id
+    cursor_field: updatedAt
+
+  - name: line_items
+    request:
+      path: /crm/v3/objects/line_items
+      params:
+        limit: "100"
+        properties: "name,quantity,price,amount,createdate,hs_lastmodifieddate"
+    decoder:
+      type: json
+      records_path: results
+    pagination:
+      type: cursor
+      cursor_param: after
+      cursor_path: paging.next.after
+    primary_key:
+      - id
+    cursor_field: updatedAt
+
+  - name: quotes
+    request:
+      path: /crm/v3/objects/quotes
+      params:
+        limit: "100"
+        properties: "hs_title,hs_expiration_date,hs_status,hs_sender_company_name,createdate,hs_lastmodifieddate"
+    decoder:
+      type: json
+      records_path: results
+    pagination:
+      type: cursor
+      cursor_param: after
+      cursor_path: paging.next.after
+    primary_key:
+      - id
+    cursor_field: updatedAt
+
+  # ============================================================================
+  # Marketing
+  # ============================================================================
+
+  - name: email_events
+    request:
+      path: /email/public/v1/events
+      params:
+        limit: "1000"
+    decoder:
+      type: json
+      records_path: events
+    pagination:
+      type: cursor
+      cursor_param: offset
+      cursor_path: offset
+    primary_key:
+      - id
+    cursor_field: created
+
+  - name: forms
+    request:
+      path: /marketing/v3/forms
+      params:
+        limit: "100"
+    decoder:
+      type: json
+      records_path: results
+    pagination:
+      type: cursor
+      cursor_param: after
+      cursor_path: paging.next.after
+    primary_key:
+      - id
+    cursor_field: updatedAt
+
+  - name: marketing_emails
+    request:
+      path: /marketing/v3/emails
+      params:
+        limit: "100"
+    decoder:
+      type: json
+      records_path: results
+    pagination:
+      type: cursor
+      cursor_param: after
+      cursor_path: paging.next.after
+    primary_key:
+      - id
+    cursor_field: updatedAt
+
+  # ============================================================================
+  # Engagement (Activities)
+  # ============================================================================
+
+  - name: engagements
+    request:
+      path: /engagements/v1/engagements/paged
+      params:
+        limit: "100"
+    decoder:
+      type: json
+      records_path: results
+    pagination:
+      type: cursor
+      cursor_param: offset
+      cursor_path: offset
+    primary_key:
+      - engagement.id
+
+  # ============================================================================
+  # Owners & Users
+  # ============================================================================
+
+  - name: owners
+    request:
+      path: /crm/v3/owners
+      params:
+        limit: "100"
+    decoder:
+      type: json
+      records_path: results
+    pagination:
+      type: cursor
+      cursor_param: after
+      cursor_path: paging.next.after
+    primary_key:
+      - id
+    cursor_field: updatedAt
+
+  # ============================================================================
+  # Pipelines
+  # ============================================================================
+
+  - name: deal_pipelines
+    request:
+      path: /crm/v3/pipelines/deals
+    decoder:
+      type: json
+      records_path: results
+    primary_key:
+      - id
+
+  - name: ticket_pipelines
+    request:
+      path: /crm/v3/pipelines/tickets
+    decoder:
+      type: json
+      records_path: results
+    primary_key:
+      - id
+
+  # ============================================================================
+  # Properties (Metadata)
+  # ============================================================================
+
+  - name: contact_properties
+    request:
+      path: /crm/v3/properties/contacts
+    decoder:
+      type: json
+      records_path: results
+    primary_key:
+      - name
+
+  - name: company_properties
+    request:
+      path: /crm/v3/properties/companies
+    decoder:
+      type: json
+      records_path: results
+    primary_key:
+      - name
+
+  - name: deal_properties
+    request:
+      path: /crm/v3/properties/deals
+    decoder:
+      type: json
+      records_path: results
+    primary_key:
+      - name

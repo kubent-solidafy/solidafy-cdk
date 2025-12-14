@@ -1,0 +1,295 @@
+name: anthropic-billing
+version: "1.0.0"
+base_url: "https://api.anthropic.com/v1/organizations"
+
+auth:
+  type: api_key
+  key: x-api-key
+  value: "{{ config.admin_api_key }}"
+  location: header
+
+http:
+  timeout_secs: 60
+  max_retries: 3
+  rate_limit_rps: 10
+
+check:
+  path: /me
+
+headers:
+  Content-Type: application/json
+  anthropic-version: "2023-06-01"
+
+streams:
+  # ============================================================================
+  # Organization Info
+  # ============================================================================
+
+  - name: organization
+    request:
+      path: /me
+    decoder:
+      type: json
+    primary_key:
+      - id
+
+  # ============================================================================
+  # Usage Report - Messages API (Aggregated)
+  # ============================================================================
+
+  - name: usage_messages
+    request:
+      path: /usage_report/messages
+      params:
+        starting_at: "{{ config.start_date }}"
+        bucket_width: "1d"
+        limit: "31"
+    decoder:
+      type: json
+      records_path: data
+    pagination:
+      type: cursor
+      cursor_param: page
+      cursor_path: next_page
+    primary_key:
+      - starting_at
+    cursor_field: starting_at
+
+  - name: usage_messages_by_model
+    request:
+      path: /usage_report/messages
+      params:
+        starting_at: "{{ config.start_date }}"
+        bucket_width: "1d"
+        limit: "31"
+        group_by[]: "model"
+    decoder:
+      type: json
+      records_path: data
+    pagination:
+      type: cursor
+      cursor_param: page
+      cursor_path: next_page
+    primary_key:
+      - starting_at
+    cursor_field: starting_at
+
+  - name: usage_messages_by_workspace
+    request:
+      path: /usage_report/messages
+      params:
+        starting_at: "{{ config.start_date }}"
+        bucket_width: "1d"
+        limit: "31"
+        group_by[]: "workspace_id"
+    decoder:
+      type: json
+      records_path: data
+    pagination:
+      type: cursor
+      cursor_param: page
+      cursor_path: next_page
+    primary_key:
+      - starting_at
+    cursor_field: starting_at
+
+  - name: usage_messages_by_api_key
+    request:
+      path: /usage_report/messages
+      params:
+        starting_at: "{{ config.start_date }}"
+        bucket_width: "1d"
+        limit: "31"
+        group_by[]: "api_key_id"
+    decoder:
+      type: json
+      records_path: data
+    pagination:
+      type: cursor
+      cursor_param: page
+      cursor_path: next_page
+    primary_key:
+      - starting_at
+    cursor_field: starting_at
+
+  - name: usage_messages_detailed
+    request:
+      path: /usage_report/messages
+      params:
+        starting_at: "{{ config.start_date }}"
+        bucket_width: "1d"
+        limit: "31"
+        group_by[]: "model"
+        group_by[]: "workspace_id"
+        group_by[]: "service_tier"
+    decoder:
+      type: json
+      records_path: data
+    pagination:
+      type: cursor
+      cursor_param: page
+      cursor_path: next_page
+    primary_key:
+      - starting_at
+    cursor_field: starting_at
+
+  # ============================================================================
+  # Cost Report
+  # ============================================================================
+
+  - name: cost_report
+    request:
+      path: /cost_report
+      params:
+        starting_at: "{{ config.start_date }}"
+        bucket_width: "1d"
+        limit: "31"
+    decoder:
+      type: json
+      records_path: data
+    pagination:
+      type: cursor
+      cursor_param: page
+      cursor_path: next_page
+    primary_key:
+      - starting_at
+    cursor_field: starting_at
+
+  - name: cost_report_by_workspace
+    request:
+      path: /cost_report
+      params:
+        starting_at: "{{ config.start_date }}"
+        bucket_width: "1d"
+        limit: "31"
+        group_by[]: "workspace_id"
+    decoder:
+      type: json
+      records_path: data
+    pagination:
+      type: cursor
+      cursor_param: page
+      cursor_path: next_page
+    primary_key:
+      - starting_at
+    cursor_field: starting_at
+
+  - name: cost_report_by_line_item
+    request:
+      path: /cost_report
+      params:
+        starting_at: "{{ config.start_date }}"
+        bucket_width: "1d"
+        limit: "31"
+        group_by[]: "line_item"
+    decoder:
+      type: json
+      records_path: data
+    pagination:
+      type: cursor
+      cursor_param: page
+      cursor_path: next_page
+    primary_key:
+      - starting_at
+    cursor_field: starting_at
+
+  # ============================================================================
+  # Claude Code Analytics
+  # ============================================================================
+
+  - name: usage_claude_code
+    request:
+      path: /usage_report/claude_code
+      params:
+        starting_at: "{{ config.start_date_short }}"
+    decoder:
+      type: json
+      records_path: data
+    pagination:
+      type: cursor
+      cursor_param: page
+      cursor_path: next_page
+    primary_key:
+      - date
+    cursor_field: date
+
+  - name: usage_claude_code_by_user
+    request:
+      path: /usage_report/claude_code
+      params:
+        starting_at: "{{ config.start_date_short }}"
+        group_by[]: "user_id"
+    decoder:
+      type: json
+      records_path: data
+    pagination:
+      type: cursor
+      cursor_param: page
+      cursor_path: next_page
+    primary_key:
+      - date
+    cursor_field: date
+
+  # ============================================================================
+  # Organization Resources
+  # ============================================================================
+
+  - name: workspaces
+    request:
+      path: /workspaces
+      params:
+        limit: "100"
+    decoder:
+      type: json
+      records_path: data
+    pagination:
+      type: cursor
+      cursor_param: after_id
+      cursor_path: last_id
+    primary_key:
+      - id
+
+  - name: api_keys
+    request:
+      path: /api_keys
+      params:
+        limit: "100"
+    decoder:
+      type: json
+      records_path: data
+    pagination:
+      type: cursor
+      cursor_param: after_id
+      cursor_path: last_id
+    primary_key:
+      - id
+
+  - name: users
+    request:
+      path: /users
+      params:
+        limit: "100"
+    decoder:
+      type: json
+      records_path: data
+    pagination:
+      type: cursor
+      cursor_param: after_id
+      cursor_path: last_id
+    primary_key:
+      - id
+
+  - name: invites
+    request:
+      path: /invites
+      params:
+        limit: "100"
+    decoder:
+      type: json
+      records_path: data
+    pagination:
+      type: cursor
+      cursor_param: after_id
+      cursor_path: last_id
+    primary_key:
+      - id

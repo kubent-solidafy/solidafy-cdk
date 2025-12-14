@@ -1,0 +1,331 @@
+name: openai-billing
+version: "1.0.0"
+base_url: "https://api.openai.com/v1/organization"
+
+auth:
+  type: bearer
+  token: "{{ config.admin_api_key }}"
+
+http:
+  timeout_secs: 60
+  max_retries: 3
+  rate_limit_rps: 10
+
+check:
+  path: /usage/completions
+  params:
+    start_time: "{{ config.start_time }}"
+    bucket_width: "1d"
+    limit: "1"
+
+headers:
+  Content-Type: application/json
+
+streams:
+  # ============================================================================
+  # Usage Endpoints - Completions (GPT-4, GPT-3.5, o1, etc.)
+  # ============================================================================
+
+  - name: usage_completions
+    request:
+      path: /usage/completions
+      params:
+        start_time: "{{ config.start_time }}"
+        bucket_width: "1d"
+        limit: "31"
+    decoder:
+      type: json
+      records_path: data
+    pagination:
+      type: cursor
+      cursor_param: page
+      cursor_path: next_page
+    primary_key:
+      - start_time
+    cursor_field: start_time
+
+  - name: usage_completions_by_model
+    request:
+      path: /usage/completions
+      params:
+        start_time: "{{ config.start_time }}"
+        bucket_width: "1d"
+        limit: "31"
+        group_by: "model"
+    decoder:
+      type: json
+      records_path: data
+    pagination:
+      type: cursor
+      cursor_param: page
+      cursor_path: next_page
+    primary_key:
+      - start_time
+    cursor_field: start_time
+
+  - name: usage_completions_by_project
+    request:
+      path: /usage/completions
+      params:
+        start_time: "{{ config.start_time }}"
+        bucket_width: "1d"
+        limit: "31"
+        group_by: "project_id"
+    decoder:
+      type: json
+      records_path: data
+    pagination:
+      type: cursor
+      cursor_param: page
+      cursor_path: next_page
+    primary_key:
+      - start_time
+    cursor_field: start_time
+
+  # ============================================================================
+  # Usage Endpoints - Embeddings
+  # ============================================================================
+
+  - name: usage_embeddings
+    request:
+      path: /usage/embeddings
+      params:
+        start_time: "{{ config.start_time }}"
+        bucket_width: "1d"
+        limit: "31"
+    decoder:
+      type: json
+      records_path: data
+    pagination:
+      type: cursor
+      cursor_param: page
+      cursor_path: next_page
+    primary_key:
+      - start_time
+    cursor_field: start_time
+
+  - name: usage_embeddings_by_model
+    request:
+      path: /usage/embeddings
+      params:
+        start_time: "{{ config.start_time }}"
+        bucket_width: "1d"
+        limit: "31"
+        group_by: "model"
+    decoder:
+      type: json
+      records_path: data
+    pagination:
+      type: cursor
+      cursor_param: page
+      cursor_path: next_page
+    primary_key:
+      - start_time
+    cursor_field: start_time
+
+  # ============================================================================
+  # Usage Endpoints - Images (DALL-E)
+  # ============================================================================
+
+  - name: usage_images
+    request:
+      path: /usage/images
+      params:
+        start_time: "{{ config.start_time }}"
+        bucket_width: "1d"
+        limit: "31"
+    decoder:
+      type: json
+      records_path: data
+    pagination:
+      type: cursor
+      cursor_param: page
+      cursor_path: next_page
+    primary_key:
+      - start_time
+    cursor_field: start_time
+
+  - name: usage_images_by_model
+    request:
+      path: /usage/images
+      params:
+        start_time: "{{ config.start_time }}"
+        bucket_width: "1d"
+        limit: "31"
+        group_by: "model"
+    decoder:
+      type: json
+      records_path: data
+    pagination:
+      type: cursor
+      cursor_param: page
+      cursor_path: next_page
+    primary_key:
+      - start_time
+    cursor_field: start_time
+
+  # ============================================================================
+  # Usage Endpoints - Audio (Whisper, TTS)
+  # ============================================================================
+
+  - name: usage_audio_speeches
+    request:
+      path: /usage/audio_speeches
+      params:
+        start_time: "{{ config.start_time }}"
+        bucket_width: "1d"
+        limit: "31"
+    decoder:
+      type: json
+      records_path: data
+    pagination:
+      type: cursor
+      cursor_param: page
+      cursor_path: next_page
+    primary_key:
+      - start_time
+    cursor_field: start_time
+
+  - name: usage_audio_transcriptions
+    request:
+      path: /usage/audio_transcriptions
+      params:
+        start_time: "{{ config.start_time }}"
+        bucket_width: "1d"
+        limit: "31"
+    decoder:
+      type: json
+      records_path: data
+    pagination:
+      type: cursor
+      cursor_param: page
+      cursor_path: next_page
+    primary_key:
+      - start_time
+    cursor_field: start_time
+
+  # ============================================================================
+  # Usage Endpoints - Moderations
+  # ============================================================================
+
+  - name: usage_moderations
+    request:
+      path: /usage/moderations
+      params:
+        start_time: "{{ config.start_time }}"
+        bucket_width: "1d"
+        limit: "31"
+    decoder:
+      type: json
+      records_path: data
+    pagination:
+      type: cursor
+      cursor_param: page
+      cursor_path: next_page
+    primary_key:
+      - start_time
+    cursor_field: start_time
+
+  # ============================================================================
+  # Usage Endpoints - Vector Stores (Assistants API)
+  # ============================================================================
+
+  - name: usage_vector_stores
+    request:
+      path: /usage/vector_stores
+      params:
+        start_time: "{{ config.start_time }}"
+        bucket_width: "1d"
+        limit: "31"
+    decoder:
+      type: json
+      records_path: data
+    pagination:
+      type: cursor
+      cursor_param: page
+      cursor_path: next_page
+    primary_key:
+      - start_time
+    cursor_field: start_time
+
+  # ============================================================================
+  # Usage Endpoints - Code Interpreter (Assistants API)
+  # ============================================================================
+
+  - name: usage_code_interpreter
+    request:
+      path: /usage/code_interpreter_sessions
+      params:
+        start_time: "{{ config.start_time }}"
+        bucket_width: "1d"
+        limit: "31"
+    decoder:
+      type: json
+      records_path: data
+    pagination:
+      type: cursor
+      cursor_param: page
+      cursor_path: next_page
+    primary_key:
+      - start_time
+    cursor_field: start_time
+
+  # ============================================================================
+  # Costs Endpoint - Matches Invoices
+  # ============================================================================
+
+  - name: costs
+    request:
+      path: /costs
+      params:
+        start_time: "{{ config.start_time }}"
+        bucket_width: "1d"
+        limit: "31"
+    decoder:
+      type: json
+      records_path: data
+    pagination:
+      type: cursor
+      cursor_param: page
+      cursor_path: next_page
+    primary_key:
+      - start_time
+    cursor_field: start_time
+
+  - name: costs_by_project
+    request:
+      path: /costs
+      params:
+        start_time: "{{ config.start_time }}"
+        bucket_width: "1d"
+        limit: "31"
+        group_by: "project_id"
+    decoder:
+      type: json
+      records_path: data
+    pagination:
+      type: cursor
+      cursor_param: page
+      cursor_path: next_page
+    primary_key:
+      - start_time
+    cursor_field: start_time
+
+  - name: costs_by_line_item
+    request:
+      path: /costs
+      params:
+        start_time: "{{ config.start_time }}"
+        bucket_width: "1d"
+        limit: "31"
+        group_by: "line_item"
+    decoder:
+      type: json
+      records_path: data
+    pagination:
+      type: cursor
+      cursor_param: page
+      cursor_path: next_page
+    primary_key:
+      - start_time
+    cursor_field: start_time

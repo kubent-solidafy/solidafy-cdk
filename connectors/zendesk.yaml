@@ -1,0 +1,242 @@
+name: zendesk
+version: "1.0.0"
+base_url: "https://{{ config.subdomain }}.zendesk.com/api/v2"
+
+auth:
+  type: oauth2_client_credentials
+  token_url: "https://{{ config.subdomain }}.zendesk.com/oauth/tokens"
+  client_id: "{{ config.client_id }}"
+  client_secret: "{{ config.client_secret }}"
+  scopes:
+    - "read"
+    - "tickets:read"
+    - "users:read"
+
+http:
+  timeout_secs: 30
+  max_retries: 3
+  rate_limit_rps: 10  # Zendesk varies by plan
+
+check:
+  path: /users/me.json
+
+headers:
+  Content-Type: application/json
+
+streams:
+  # ============================================================================
+  # Tickets
+  # ============================================================================
+
+  - name: tickets
+    request:
+      path: /tickets.json
+      params:
+        page[size]: "100"
+        sort: updated_at
+    decoder:
+      type: json
+      records_path: tickets
+    pagination:
+      type: cursor
+      cursor_param: page[after]
+      cursor_path: meta.after_cursor
+    primary_key:
+      - id
+    cursor_field: updated_at
+
+  - name: ticket_metrics
+    request:
+      path: /ticket_metrics.json
+      params:
+        page[size]: "100"
+    decoder:
+      type: json
+      records_path: ticket_metrics
+    pagination:
+      type: cursor
+      cursor_param: page[after]
+      cursor_path: meta.after_cursor
+    primary_key:
+      - id
+
+  # ============================================================================
+  # Users & Organizations
+  # ============================================================================
+
+  - name: users
+    request:
+      path: /users.json
+      params:
+        page[size]: "100"
+    decoder:
+      type: json
+      records_path: users
+    pagination:
+      type: cursor
+      cursor_param: page[after]
+      cursor_path: meta.after_cursor
+    primary_key:
+      - id
+    cursor_field: updated_at
+
+  - name: organizations
+    request:
+      path: /organizations.json
+      params:
+        page[size]: "100"
+    decoder:
+      type: json
+      records_path: organizations
+    pagination:
+      type: cursor
+      cursor_param: page[after]
+      cursor_path: meta.after_cursor
+    primary_key:
+      - id
+    cursor_field: updated_at
+
+  - name: groups
+    request:
+      path: /groups.json
+      params:
+        page[size]: "100"
+    decoder:
+      type: json
+      records_path: groups
+    pagination:
+      type: cursor
+      cursor_param: page[after]
+      cursor_path: meta.after_cursor
+    primary_key:
+      - id
+    cursor_field: updated_at
+
+  # ============================================================================
+  # Support Configuration
+  # ============================================================================
+
+  - name: brands
+    request:
+      path: /brands.json
+    decoder:
+      type: json
+      records_path: brands
+    primary_key:
+      - id
+
+  - name: ticket_fields
+    request:
+      path: /ticket_fields.json
+    decoder:
+      type: json
+      records_path: ticket_fields
+    primary_key:
+      - id
+
+  - name: ticket_forms
+    request:
+      path: /ticket_forms.json
+    decoder:
+      type: json
+      records_path: ticket_forms
+    primary_key:
+      - id
+
+  - name: macros
+    request:
+      path: /macros.json
+      params:
+        page[size]: "100"
+    decoder:
+      type: json
+      records_path: macros
+    pagination:
+      type: cursor
+      cursor_param: page[after]
+      cursor_path: meta.after_cursor
+    primary_key:
+      - id
+    cursor_field: updated_at
+
+  - name: triggers
+    request:
+      path: /triggers.json
+      params:
+        page[size]: "100"
+    decoder:
+      type: json
+      records_path: triggers
+    pagination:
+      type: cursor
+      cursor_param: page[after]
+      cursor_path: meta.after_cursor
+    primary_key:
+      - id
+    cursor_field: updated_at
+
+  - name: automations
+    request:
+      path: /automations.json
+      params:
+        page[size]: "100"
+    decoder:
+      type: json
+      records_path: automations
+    pagination:
+      type: cursor
+      cursor_param: page[after]
+      cursor_path: meta.after_cursor
+    primary_key:
+      - id
+    cursor_field: updated_at
+
+  - name: views
+    request:
+      path: /views.json
+      params:
+        page[size]: "100"
+    decoder:
+      type: json
+      records_path: views
+    pagination:
+      type: cursor
+      cursor_param: page[after]
+      cursor_path: meta.after_cursor
+    primary_key:
+      - id
+    cursor_field: updated_at
+
+  # ============================================================================
+  # Satisfaction Ratings
+  # ============================================================================
+
+  - name: satisfaction_ratings
+    request:
+      path: /satisfaction_ratings.json
+      params:
+        page[size]: "100"
+        sort_order: desc
+    decoder:
+      type: json
+      records_path: satisfaction_ratings
+    pagination:
+      type: cursor
+      cursor_param: page[after]
+      cursor_path: meta.after_cursor
+    primary_key:
+      - id
+    cursor_field: updated_at
+
+  # ============================================================================
+  # Tags
+  # ============================================================================
+
+  - name: tags
+    request:
+      path: /tags.json
+    decoder:
+      type: json
+      records_path: tags
+    primary_key:
+      - name
